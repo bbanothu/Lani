@@ -1,0 +1,17 @@
+{
+  "name": "savemoneyai-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:website": "npm run dev --workspace=apps/website",
+    "build:website": "npm run build --workspace=apps/website",
+    "dev:extension": "npm run dev --workspace=apps/extension",
+    "build:extension": "npm run build --workspace=apps/extension",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  }
+}
