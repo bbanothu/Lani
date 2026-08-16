@@ -121,14 +121,22 @@ function RailCard({ product }: { product: Product }) {
   }, [product.id]);
 
   return (
-    <Pressable style={railStyles.card} onPress={() => Linking.openURL(product.url)}>
-      {product.image ? (
-        <Image source={{ uri: product.image }} style={railStyles.image} />
-      ) : (
-        <View style={[railStyles.image, railStyles.imagePlaceholder]}>
-          <Text style={{ fontSize: 20, opacity: 0.4 }}>🛍️</Text>
+    <View style={railStyles.card}>
+      <Pressable onPress={() => Linking.openURL(product.url)}>
+        {product.image ? (
+          <Image source={{ uri: product.image }} style={railStyles.image} />
+        ) : (
+          <View style={[railStyles.image, railStyles.imagePlaceholder]}>
+            <Text style={{ fontSize: 24, opacity: 0.4 }}>🛍️</Text>
+          </View>
+        )}
+        <View style={railStyles.body}>
+          <Text style={railStyles.title} numberOfLines={2}>
+            {product.title}
+          </Text>
+          <Text style={railStyles.price}>{price}</Text>
         </View>
-      )}
+      </Pressable>
       <Pressable
         hitSlop={6}
         onPress={() => addToCart(product)}
@@ -138,11 +146,7 @@ function RailCard({ product }: { product: Product }) {
           {inCart ? '✓' : '🛒'}
         </Text>
       </Pressable>
-      <Text style={railStyles.title} numberOfLines={2}>
-        {product.title}
-      </Text>
-      <Text style={railStyles.price}>{price}</Text>
-    </Pressable>
+    </View>
   );
 }
 
@@ -162,22 +166,28 @@ function ProductRail({ products }: { products: Product[] }) {
 
 const railStyles = StyleSheet.create({
   card: {
-    width: 130,
-    borderRadius: 14,
+    width: 148,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.ink10,
     backgroundColor: colors.white,
-    padding: 8,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  image: { width: '100%', aspectRatio: 1, borderRadius: 10, backgroundColor: colors.ink05 },
+  image: { width: '100%', aspectRatio: 1, backgroundColor: colors.ink05 },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  body: { paddingHorizontal: 10, paddingVertical: 8, gap: 4 },
   cartBtn: {
     position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.95)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -190,8 +200,8 @@ const railStyles = StyleSheet.create({
   cartBtnActive: { backgroundColor: colors.brand },
   cartBtnText: { fontSize: 12 },
   cartBtnTextActive: { color: colors.white, fontWeight: '700' },
-  title: { marginTop: 6, fontSize: 12, fontWeight: '600', color: colors.ink },
-  price: { marginTop: 2, fontSize: 13, fontWeight: '700', color: colors.ink },
+  title: { fontSize: 12, fontWeight: '600', lineHeight: 15, color: colors.ink },
+  price: { fontSize: 14, fontWeight: '700', color: colors.ink },
 });
 
 const WELCOME_MESSAGE: UiMessage = {
