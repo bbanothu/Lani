@@ -1,0 +1,80 @@
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { Product } from '../lib/products';
+import { colors } from '../lib/theme';
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${Math.max(1, mins)}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function retailerLabel(domain: string): string {
+  return domain.replace(/^www\./, '').replace(/\.(com|net|org|co|io).*$/i, '');
+}
+
+export default function ProductCard({ product }: { product: Product }) {
+  const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
+
+  return (
+    <Pressable style={styles.card} onPress={() => Linking.openURL(product.url)}>
+      <View style={styles.metaRow}>
+        <Text style={styles.retailer} numberOfLines={1}>
+          {retailerLabel(product.domain)}
+        </Text>
+        <Text style={styles.time}>{relativeTime(product.addedAt)}</Text>
+      </View>
+
+      <View style={styles.imageWrap}>
+        {product.image ? (
+          <Image source={{ uri: product.image }} style={styles.image} resizeMode="cover" />
+        ) : (
+          <Text style={styles.placeholder}>🛍️</Text>
+        )}
+      </View>
+
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={2}>
+          {product.title}
+        </Text>
+        <Text style={styles.price}>{price}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.ink08,
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+  },
+  retailer: { fontSize: 11, fontWeight: '500', color: colors.ink40, textTransform: 'lowercase' },
+  time: { fontSize: 11, color: colors.ink40 },
+  imageWrap: {
+    margin: 12,
+    marginTop: 8,
+    aspectRatio: 4 / 3,
+    borderRadius: 12,
+    backgroundColor: colors.ink05,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  image: { width: '100%', height: '100%' },
+  placeholder: { fontSize: 28, opacity: 0.4 },
+  body: { paddingHorizontal: 14, paddingBottom: 14 },
+  title: { fontSize: 13, fontWeight: '600', lineHeight: 17, color: colors.ink },
+  price: { marginTop: 4, fontSize: 16, fontWeight: '700', color: colors.ink },
+});
