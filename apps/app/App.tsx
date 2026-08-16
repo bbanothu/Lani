@@ -8,6 +8,7 @@ import { colors } from './lib/theme';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CartScreen from './screens/CartScreen';
+import ChatScreen from './screens/ChatScreen';
 import ListsScreen from './screens/ListsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
@@ -29,6 +30,8 @@ export default function App() {
   let screen = null;
   if (!user) {
     screen = <LoginScreen />;
+  } else if (tab === 'chat') {
+    screen = <ChatScreen onNavigate={setTab} />;
   } else if (tab === 'cart') {
     screen = <CartScreen onNavigate={setTab} />;
   } else if (tab === 'lists') {

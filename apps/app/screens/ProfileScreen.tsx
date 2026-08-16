@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import { signOut, updateName, type AuthUser } from '../lib/auth';
 import { getLists, subscribeToLists } from '../lib/lists';
+import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '../lib/llm';
 import type { Tab } from '../lib/nav';
 import { getProducts, subscribeToProducts, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
@@ -17,6 +18,12 @@ function initials(name: string): string {
 function storeLabel(domain: string): string {
   return domain.replace(/^www\./, '').replace(/\.(com|net|org|co|io).*$/i, '');
 }
+
+const PROVIDERS: { id: LLMProvider; label: string }[] = [
+  { id: 'ollama', label: 'Ollama' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'openrouter', label: 'OpenRouter' },
+];
 
 function faviconUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
@@ -48,10 +55,16 @@ export default function ProfileScreen({
   const [favoritedCount, setFavoritedCount] = useState(0);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user.name);
+  const [llm, setLlm] = useState<LLMSettings | null>(null);
+  const [llmSaved, setLlmSaved] = useState(false);
 
   useEffect(() => {
     getProducts().then(setProducts);
     return subscribeToProducts(() => getProducts().then(setProducts));
+  }, []);
+
+  useEffect(() => {
+    getLLMSettings().then(setLlm);
   }, []);
 
   useEffect(() => {
@@ -70,6 +83,13 @@ export default function ProfileScreen({
     await updateName(trimmed);
     setName(trimmed);
     setEditing(false);
+  }
+
+  async function handleSaveLlm() {
+    if (!llm) return;
+    await saveLLMSettings(llm);
+    setLlmSaved(true);
+    setTimeout(() => setLlmSaved(false), 1500);
   }
 
   return (
@@ -138,6 +158,72 @@ export default function ProfileScreen({
             ))
           )}
         </View>
+
+        {llm && (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>AI ASSISTANT</Text>
+
+            <View style={styles.providerRow}>
+              {PROVIDERS.map((p) => {
+                const active = llm.provider === p.id;
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => setLlm({ ...llm, provider: p.id })}
+                    style={[styles.providerChip, active && styles.providerChipActive]}
+                  >
+                    <Text
+                      style={[styles.providerChipText, active && styles.providerChipTextActive]}
+                    >
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.fieldLabel}>Model</Text>
+            <TextInput
+              value={llm.model}
+              onChangeText={(v) => setLlm({ ...llm, model: v })}
+              placeholder="e.g. llama3.1"
+              placeholderTextColor={colors.ink40}
+              autoCapitalize="none"
+              style={styles.llmInput}
+            />
+
+            {llm.provider === 'ollama' ? (
+              <>
+                <Text style={styles.fieldLabel}>Ollama base URL</Text>
+                <TextInput
+                  value={llm.ollamaBaseUrl}
+                  onChangeText={(v) => setLlm({ ...llm, ollamaBaseUrl: v })}
+                  placeholder="http://127.0.0.1:11434/v1"
+                  placeholderTextColor={colors.ink40}
+                  autoCapitalize="none"
+                  style={styles.llmInput}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>API key</Text>
+                <TextInput
+                  value={llm.apiKey}
+                  onChangeText={(v) => setLlm({ ...llm, apiKey: v })}
+                  placeholder="sk-..."
+                  placeholderTextColor={colors.ink40}
+                  autoCapitalize="none"
+                  secureTextEntry
+                  style={styles.llmInput}
+                />
+              </>
+            )}
+
+            <Pressable style={styles.llmSaveBtn} onPress={handleSaveLlm}>
+              <Text style={styles.llmSaveBtnText}>{llmSaved ? 'Saved ✓' : 'Save'}</Text>
+            </Pressable>
+          </View>
+        )}
 
         <Pressable
           style={styles.signOutBtn}
@@ -216,4 +302,34 @@ const styles = StyleSheet.create({
   storeBarFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   signOutBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 10 },
   signOutText: { fontSize: 14, fontWeight: '600', color: colors.ink45 },
+  providerRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  providerChip: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.ink10,
+    paddingVertical: 8,
+  },
+  providerChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  providerChipText: { fontSize: 12, fontWeight: '600', color: colors.ink60 },
+  providerChipTextActive: { color: colors.white },
+  fieldLabel: { marginTop: 14, marginBottom: 6, fontSize: 12, fontWeight: '600', color: colors.ink45 },
+  llmInput: {
+    borderWidth: 1,
+    borderColor: colors.ink15,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  llmSaveBtn: {
+    marginTop: 14,
+    backgroundColor: colors.brand,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  llmSaveBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
 });
