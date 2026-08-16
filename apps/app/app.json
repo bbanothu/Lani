@@ -2,6 +2,7 @@
   "expo": {
     "name": "Lani",
     "slug": "lani",
+    "owner": "bbanothu",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon-store.png",
@@ -25,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e12f5543-6974-4944-b751-423c2bd086b8"
+      }
     }
   }
 }
