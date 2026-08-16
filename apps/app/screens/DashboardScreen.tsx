@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import ProductCard from '../components/ProductCard';
 import QuickFilters, { type FilterChip } from '../components/QuickFilters';
@@ -67,7 +68,7 @@ export default function DashboardScreen({
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <FlatList
         data={visible}
         keyExtractor={(p) => p.id}
@@ -105,7 +106,7 @@ export default function DashboardScreen({
         )}
       />
       <BottomNav active="home" onSelect={onNavigate} />
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import { signOut, updateName, type AuthUser } from '../lib/auth';
 import { getLists, subscribeToLists } from '../lib/lists';
@@ -72,7 +73,7 @@ export default function ProfileScreen({
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Profile</Text>
 
@@ -147,7 +148,7 @@ export default function ProfileScreen({
       </ScrollView>
 
       <BottomNav active="profile" onSelect={onNavigate} />
-    </View>
+    </SafeAreaView>
   );
 }
 

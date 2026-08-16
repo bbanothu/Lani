@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import { clearCart, getCart, removeFromCart, subscribeToCart } from '../lib/cart';
 import type { Product } from '../lib/products';
@@ -42,7 +43,7 @@ export default function CartScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <FlatList
         data={items}
         keyExtractor={(p) => p.id}
@@ -103,7 +104,7 @@ export default function CartScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
         )}
       />
       <BottomNav active="cart" onSelect={onNavigate} />
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useSession } from './lib/auth';
 import type { Tab } from './lib/nav';
@@ -16,10 +17,12 @@ export default function App() {
 
   if (!ready) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.brand} />
-        <StatusBar style="dark" />
-      </View>
+      <SafeAreaProvider>
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.brand} />
+          <StatusBar style="dark" />
+        </View>
+      </SafeAreaProvider>
     );
   }
 
@@ -39,10 +42,10 @@ export default function App() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       {screen}
       <StatusBar style="dark" />
-    </>
+    </SafeAreaProvider>
   );
 }
 

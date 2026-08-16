@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import {
   createList,
@@ -104,7 +105,7 @@ export default function ListsScreen({ onNavigate }: { onNavigate: (tab: Tab) => 
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen}>
       <FlatList
         data={visible}
         keyExtractor={(l) => l.id}
@@ -234,7 +235,7 @@ export default function ListsScreen({ onNavigate }: { onNavigate: (tab: Tab) => 
       </Modal>
 
       <BottomNav active="lists" onSelect={onNavigate} />
-    </View>
+    </SafeAreaView>
   );
 }
 

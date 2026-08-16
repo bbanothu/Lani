@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { signIn, signUp } from '../lib/auth';
 import { colors } from '../lib/theme';
 
@@ -38,76 +39,81 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.card}>
-        <View style={styles.header}>
-          <Image source={require('../assets/lani-icon.png')} style={styles.logo} />
-          <Text style={styles.title}>
-            {mode === 'signin' ? 'Welcome back' : 'Create your account'}
-          </Text>
-        </View>
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.card}>
+          <View style={styles.header}>
+            <Image source={require('../assets/lani-icon.png')} style={styles.logo} />
+            <Text style={styles.title}>
+              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            </Text>
+          </View>
 
-        <View style={styles.form}>
-          {mode === 'signup' && (
+          <View style={styles.form}>
+            {mode === 'signup' && (
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Name"
+                placeholderTextColor={colors.ink40}
+                style={styles.input}
+              />
+            )}
             <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Name"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
               placeholderTextColor={colors.ink40}
+              autoCapitalize="none"
+              keyboardType="email-address"
               style={styles.input}
             />
-          )}
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Email"
-            placeholderTextColor={colors.ink40}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            style={styles.input}
-          />
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            placeholderTextColor={colors.ink40}
-            secureTextEntry
-            style={styles.input}
-          />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor={colors.ink40}
+              secureTextEntry
+              style={styles.input}
+            />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            <Pressable
+              onPress={handleSubmit}
+              disabled={busy}
+              style={[styles.button, busy && styles.buttonDisabled]}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.buttonText}>{mode === 'signin' ? 'Sign in' : 'Sign up'}</Text>
+              )}
+            </Pressable>
+          </View>
+
           <Pressable
-            onPress={handleSubmit}
-            disabled={busy}
-            style={[styles.button, busy && styles.buttonDisabled]}
+            onPress={() => {
+              setError(null);
+              setMode(mode === 'signin' ? 'signup' : 'signin');
+            }}
+            style={styles.switchButton}
           >
-            {busy ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.buttonText}>{mode === 'signin' ? 'Sign in' : 'Sign up'}</Text>
-            )}
+            <Text style={styles.switchText}>
+              {mode === 'signin'
+                ? "Don't have an account? Sign up"
+                : 'Already have an account? Sign in'}
+            </Text>
           </Pressable>
         </View>
-
-        <Pressable
-          onPress={() => {
-            setError(null);
-            setMode(mode === 'signin' ? 'signup' : 'signin');
-          }}
-          style={styles.switchButton}
-        >
-          <Text style={styles.switchText}>
-            {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-          </Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.cream },
   screen: {
     flex: 1,
     backgroundColor: colors.cream,
