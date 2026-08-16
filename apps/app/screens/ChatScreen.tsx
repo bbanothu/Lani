@@ -4,6 +4,8 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -13,12 +15,28 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
+import { addToCart, isInCart, subscribeToCart } from '../lib/cart';
 import { sendChat } from '../lib/chat';
+import {
+  addChatMessage,
+  createChatSession,
+  getChatMessages,
+  getChatSessions,
+  titleFromMessage,
+  type ChatSession,
+} from '../lib/chat-history';
 import { getLLMSettings, type ChatMessage } from '../lib/llm';
 import { getLists } from '../lib/lists';
 import type { Tab } from '../lib/nav';
 import { getProducts, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
+
+function relativeDay(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+}
 
 type UiMessage = {
   id: string;
@@ -92,6 +110,42 @@ function parseAssistantReply(
   return { content: content || '…', productIds: ids };
 }
 
+function RailCard({ product }: { product: Product }) {
+  const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
+  const [inCart, setInCart] = useState(false);
+
+  useEffect(() => {
+    const sync = () => isInCart(product.id).then(setInCart);
+    sync();
+    return subscribeToCart(sync);
+  }, [product.id]);
+
+  return (
+    <Pressable style={railStyles.card} onPress={() => Linking.openURL(product.url)}>
+      {product.image ? (
+        <Image source={{ uri: product.image }} style={railStyles.image} />
+      ) : (
+        <View style={[railStyles.image, railStyles.imagePlaceholder]}>
+          <Text style={{ fontSize: 20, opacity: 0.4 }}>🛍️</Text>
+        </View>
+      )}
+      <Pressable
+        hitSlop={6}
+        onPress={() => addToCart(product)}
+        style={[railStyles.cartBtn, inCart && railStyles.cartBtnActive]}
+      >
+        <Text style={[railStyles.cartBtnText, inCart && railStyles.cartBtnTextActive]}>
+          {inCart ? '✓' : '🛒'}
+        </Text>
+      </Pressable>
+      <Text style={railStyles.title} numberOfLines={2}>
+        {product.title}
+      </Text>
+      <Text style={railStyles.price}>{price}</Text>
+    </Pressable>
+  );
+}
+
 function ProductRail({ products }: { products: Product[] }) {
   if (!products.length) return null;
   return (
@@ -101,24 +155,7 @@ function ProductRail({ products }: { products: Product[] }) {
       data={products}
       keyExtractor={(p) => p.id}
       contentContainerStyle={{ gap: 10 }}
-      renderItem={({ item }) => {
-        const price = item.price != null ? `$${Number(item.price).toLocaleString()}` : '—';
-        return (
-          <View style={railStyles.card}>
-            {item.image ? (
-              <Image source={{ uri: item.image }} style={railStyles.image} />
-            ) : (
-              <View style={[railStyles.image, railStyles.imagePlaceholder]}>
-                <Text style={{ fontSize: 20, opacity: 0.4 }}>🛍️</Text>
-              </View>
-            )}
-            <Text style={railStyles.title} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={railStyles.price}>{price}</Text>
-          </View>
-        );
-      }}
+      renderItem={({ item }) => <RailCard product={item} />}
     />
   );
 }
@@ -134,22 +171,45 @@ const railStyles = StyleSheet.create({
   },
   image: { width: '100%', aspectRatio: 1, borderRadius: 10, backgroundColor: colors.ink05 },
   imagePlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  cartBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  cartBtnActive: { backgroundColor: colors.brand },
+  cartBtnText: { fontSize: 12 },
+  cartBtnTextActive: { color: colors.white, fontWeight: '700' },
   title: { marginTop: 6, fontSize: 12, fontWeight: '600', color: colors.ink },
   price: { marginTop: 2, fontSize: 13, fontWeight: '700', color: colors.ink },
 });
 
+const WELCOME_MESSAGE: UiMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
+};
+
 export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
-  const [messages, setMessages] = useState<UiMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
-    },
-  ]);
+  const [messages, setMessages] = useState<UiMessage[]>([WELCOME_MESSAGE]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Map<string, Product>>(new Map());
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const listRef = useRef<FlatList<UiMessage>>(null);
 
   useEffect(() => {
@@ -172,6 +232,14 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
     setError(null);
 
     try {
+      let sid = sessionId;
+      if (!sid) {
+        const session = await createChatSession(titleFromMessage(trimmed));
+        sid = session.id;
+        setSessionId(sid);
+      }
+      await addChatMessage(sid, 'user', trimmed);
+
       const history: ChatMessage[] = [
         await buildSystemMessage(),
         ...next.map((m) => ({ role: m.role, content: m.content })),
@@ -188,11 +256,34 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
           productIds: parsed.productIds,
         },
       ]);
+      await addChatMessage(sid, 'assistant', parsed.content, parsed.productIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed');
     } finally {
       setSending(false);
     }
+  }
+
+  function startNewChat() {
+    setMessages([WELCOME_MESSAGE]);
+    setSessionId(null);
+    setError(null);
+  }
+
+  async function openHistory() {
+    setHistoryVisible(true);
+    setHistoryLoading(true);
+    setSessions(await getChatSessions());
+    setHistoryLoading(false);
+  }
+
+  async function loadSession(session: ChatSession) {
+    const stored = await getChatMessages(session.id);
+    setMessages(
+      stored.map((m) => ({ id: m.id, role: m.role, content: m.content, productIds: m.productIds })),
+    );
+    setSessionId(session.id);
+    setHistoryVisible(false);
   }
 
   return (
@@ -201,7 +292,17 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.title}>Chat with Nora</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Chat with Nora</Text>
+          <View style={styles.headerActions}>
+            <Pressable hitSlop={8} onPress={openHistory} style={styles.headerBtn}>
+              <Text style={styles.headerBtnIcon}>🕘</Text>
+            </Pressable>
+            <Pressable hitSlop={8} onPress={startNewChat} style={styles.headerBtn}>
+              <Text style={styles.headerBtnIcon}>✚</Text>
+            </Pressable>
+          </View>
+        </View>
 
         <FlatList
           ref={listRef}
@@ -276,6 +377,38 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
         </View>
       </KeyboardAvoidingView>
 
+      <Modal visible={historyVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Previous chats</Text>
+              <Pressable hitSlop={8} onPress={() => setHistoryVisible(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </Pressable>
+            </View>
+            {historyLoading ? (
+              <ActivityIndicator color={colors.brand} style={{ marginVertical: 24 }} />
+            ) : sessions.length === 0 ? (
+              <Text style={styles.modalEmpty}>No previous chats yet.</Text>
+            ) : (
+              <FlatList
+                data={sessions}
+                keyExtractor={(s) => s.id}
+                style={{ maxHeight: 360 }}
+                renderItem={({ item }) => (
+                  <Pressable style={styles.sessionRow} onPress={() => loadSession(item)}>
+                    <Text style={styles.sessionTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.sessionDate}>{relativeDay(item.updatedAt)}</Text>
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <BottomNav active="chat" onSelect={onNavigate} />
     </SafeAreaView>
   );
@@ -283,14 +416,62 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.ink,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
   },
+  title: { fontSize: 22, fontWeight: '700', color: colors.ink },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.ink10,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBtnIcon: { fontSize: 16 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    maxHeight: '70%',
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: colors.ink },
+  modalClose: { fontSize: 16, color: colors.ink40 },
+  modalEmpty: { fontSize: 14, color: colors.ink45, textAlign: 'center', paddingVertical: 24 },
+  sessionRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.ink08,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sessionTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.ink },
+  sessionDate: { fontSize: 12, color: colors.ink40 },
   list: { padding: 16, paddingBottom: 24, gap: 14 },
   userRow: { alignItems: 'flex-end' },
   userBubble: {

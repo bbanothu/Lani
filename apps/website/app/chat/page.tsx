@@ -8,6 +8,21 @@ import { getLLMSettings, type ChatMessage } from '@/lib/llm';
 import { addToCart } from '@/lib/cart';
 import { getProducts, subscribeToProducts, type Product } from '@/lib/products';
 import { getLists } from '@/lib/lists';
+import {
+  addChatMessage,
+  createChatSession,
+  getChatMessages,
+  getChatSessions,
+  titleFromMessage,
+  type ChatSession,
+} from '@/lib/chat-history';
+
+function relativeDay(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days}d ago`;
+}
 
 type UiMessage = {
   id: string;
@@ -142,20 +157,24 @@ function ChatProductRail({ products }: { products: Product[] }) {
   );
 }
 
+const WELCOME_MESSAGE: UiMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
+};
+
 export default function ChatPage() {
   const router = useRouter();
   const { user, ready } = useRequireUser();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [messages, setMessages] = useState<UiMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
-    },
-  ]);
+  const [messages, setMessages] = useState<UiMessage[]>([WELCOME_MESSAGE]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<Map<string, Product>>(new Map());
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -185,6 +204,14 @@ export default function ChatPage() {
     setError(null);
 
     try {
+      let sid = sessionId;
+      if (!sid) {
+        const session = await createChatSession(titleFromMessage(trimmed));
+        sid = session.id;
+        setSessionId(sid);
+      }
+      await addChatMessage(sid, 'user', trimmed);
+
       const history: ChatMessage[] = [
         await buildSystemMessage(),
         ...next.map((m) => ({ role: m.role, content: m.content })),
@@ -207,6 +234,7 @@ export default function ChatPage() {
           productIds: parsed.productIds,
         },
       ]);
+      await addChatMessage(sid, 'assistant', parsed.content, parsed.productIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed');
     } finally {
@@ -219,12 +247,56 @@ export default function ChatPage() {
     void send(input);
   }
 
+  function startNewChat() {
+    setMessages([WELCOME_MESSAGE]);
+    setSessionId(null);
+    setError(null);
+  }
+
+  async function openHistory() {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    setSessions(await getChatSessions());
+    setHistoryLoading(false);
+  }
+
+  async function loadSession(session: ChatSession) {
+    const stored = await getChatMessages(session.id);
+    setMessages(
+      stored.map((m) => ({ id: m.id, role: m.role, content: m.content, productIds: m.productIds })),
+    );
+    setSessionId(session.id);
+    setHistoryOpen(false);
+  }
+
   if (!ready || !user) return null;
 
   return (
     <div className="h-dvh overflow-hidden bg-cream">
       <main className="mx-auto my-auto grid h-full w-[90%] max-w-[90%] grid-cols-1 grid-rows-[auto_minmax(0,1fr)] px-4 pt-28 sm:px-6">
-        <h1 className="mb-4 text-3xl font-bold tracking-tight text-ink">Chat with Nora</h1>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-ink">Chat with Nora</h1>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openHistory}
+              aria-label="Previous chats"
+              title="Previous chats"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-ink/10 bg-white text-ink/60 shadow-sm transition-colors hover:text-ink"
+            >
+              🕘
+            </button>
+            <button
+              type="button"
+              onClick={startNewChat}
+              aria-label="New chat"
+              title="New chat"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-ink/10 bg-white text-ink/60 shadow-sm transition-colors hover:text-ink"
+            >
+              ✚
+            </button>
+          </div>
+        </div>
 
         <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-[#F3F3F1]">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-6">
@@ -321,6 +393,47 @@ export default function ChatPage() {
           if (tab === 'profile') router.push('/profile');
         }}
       />
+
+      {historyOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
+          <div className="w-full max-w-sm rounded-[24px] bg-white p-6 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-lg font-bold text-ink">Previous chats</p>
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(false)}
+                aria-label="Close"
+                className="text-ink/40 hover:text-ink/70"
+              >
+                ✕
+              </button>
+            </div>
+            {historyLoading ? (
+              <p className="py-6 text-center text-sm text-ink/45">Loading…</p>
+            ) : sessions.length === 0 ? (
+              <p className="py-6 text-center text-sm text-ink/45">No previous chats yet.</p>
+            ) : (
+              <div className="max-h-80 overflow-y-auto">
+                {sessions.map((session) => (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => loadSession(session)}
+                    className="flex w-full items-center justify-between gap-3 border-b border-ink/5 py-3 text-left last:border-b-0"
+                  >
+                    <span className="truncate text-sm font-semibold text-ink">
+                      {session.title}
+                    </span>
+                    <span className="shrink-0 text-xs text-ink/40">
+                      {relativeDay(session.updatedAt)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
