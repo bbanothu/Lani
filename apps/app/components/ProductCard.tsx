@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { addToCart, isInCart, removeFromCart, subscribeToCart } from '../lib/cart';
+import { isProductFavorited, subscribeToLists, toggleFavorite } from '../lib/lists';
 import type { Product } from '../lib/products';
 import { colors } from '../lib/theme';
 
@@ -17,6 +20,20 @@ function retailerLabel(domain: string): string {
 
 export default function ProductCard({ product }: { product: Product }) {
   const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
+  const [inCart, setInCart] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+
+  useEffect(() => {
+    const sync = () => isInCart(product.id).then(setInCart);
+    sync();
+    return subscribeToCart(sync);
+  }, [product.id]);
+
+  useEffect(() => {
+    const sync = () => isProductFavorited(product.id).then(setFavorited);
+    sync();
+    return subscribeToLists(sync);
+  }, [product.id]);
 
   return (
     <Pressable style={styles.card} onPress={() => Linking.openURL(product.url)}>
@@ -40,6 +57,27 @@ export default function ProductCard({ product }: { product: Product }) {
           {product.title}
         </Text>
         <Text style={styles.price}>{price}</Text>
+
+        <View style={styles.actions}>
+          <Pressable
+            hitSlop={8}
+            onPress={() => toggleFavorite(product.id)}
+            style={styles.actionBtn}
+          >
+            <Text style={[styles.actionGlyph, favorited && styles.actionGlyphActive]}>
+              {favorited ? '♥' : '♡'}
+            </Text>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            onPress={() => (inCart ? removeFromCart(product.id) : addToCart(product))}
+            style={styles.actionBtn}
+          >
+            <Text style={[styles.actionGlyph, inCart && styles.actionGlyphActive]}>
+              {inCart ? '✓ Cart' : '+ Cart'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );
@@ -77,4 +115,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 14, paddingBottom: 14 },
   title: { fontSize: 13, fontWeight: '600', lineHeight: 17, color: colors.ink },
   price: { marginTop: 4, fontSize: 16, fontWeight: '700', color: colors.ink },
+  actions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  actionBtn: { paddingVertical: 2 },
+  actionGlyph: { fontSize: 13, fontWeight: '600', color: colors.ink40 },
+  actionGlyphActive: { color: colors.brand },
 });

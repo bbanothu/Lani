@@ -13,7 +13,7 @@ export interface Product {
   tags?: string[];
 }
 
-type ProductRow = {
+export type ProductRow = {
   id: string;
   title: string;
   price: number | null;
@@ -26,7 +26,7 @@ type ProductRow = {
   tags: string[] | null;
 };
 
-function productFromRow(row: ProductRow): Product {
+export function productFromRow(row: ProductRow): Product {
   return {
     id: row.id,
     title: row.title,
@@ -48,4 +48,14 @@ export async function getProducts(): Promise<Product[]> {
     .order('added_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(productFromRow);
+}
+
+export function subscribeToProducts(callback: () => void): () => void {
+  const channel = supabase
+    .channel(`products-changes-${Math.random().toString(36).slice(2)}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, callback)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

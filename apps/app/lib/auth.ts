@@ -42,6 +42,11 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+export async function updateName(name: string): Promise<string | null> {
+  const { error } = await supabase.auth.updateUser({ data: { name } });
+  return error?.message ?? null;
+}
+
 /** Tracks the signed-in user across the app; null once loaded means signed out. */
 export function useSession(): { user: AuthUser | null; ready: boolean } {
   const [user, setUser] = useState<AuthUser | null>(null);

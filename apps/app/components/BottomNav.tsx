@@ -1,7 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { Tab } from '../lib/nav';
 import { colors } from '../lib/theme';
-
-type Tab = 'home' | 'chat' | 'cart' | 'lists' | 'profile';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },

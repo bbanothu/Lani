@@ -1,0 +1,218 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import BottomNav from '../components/BottomNav';
+import { signOut, updateName, type AuthUser } from '../lib/auth';
+import { getLists, subscribeToLists } from '../lib/lists';
+import type { Tab } from '../lib/nav';
+import { getProducts, subscribeToProducts, type Product } from '../lib/products';
+import { colors } from '../lib/theme';
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
+
+function storeLabel(domain: string): string {
+  return domain.replace(/^www\./, '').replace(/\.(com|net|org|co|io).*$/i, '');
+}
+
+function faviconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function topStores(products: Product[]): { domain: string; count: number; pct: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of products) {
+    if (!p.domain) continue;
+    counts.set(p.domain, (counts.get(p.domain) ?? 0) + 1);
+  }
+  const total = products.length || 1;
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([domain, count]) => ({ domain, count, pct: Math.round((count / total) * 100) }));
+}
+
+export default function ProfileScreen({
+  user,
+  onNavigate,
+  onSignedOut,
+}: {
+  user: AuthUser;
+  onNavigate: (tab: Tab) => void;
+  onSignedOut: () => void;
+}) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [favoritedCount, setFavoritedCount] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(user.name);
+
+  useEffect(() => {
+    getProducts().then(setProducts);
+    return subscribeToProducts(() => getProducts().then(setProducts));
+  }, []);
+
+  useEffect(() => {
+    const sync = () =>
+      getLists().then((lists) =>
+        setFavoritedCount(lists.find((l) => l.isFavorites)?.productIds.length ?? 0),
+      );
+    sync();
+    return subscribeToLists(sync);
+  }, []);
+
+  const stores = useMemo(() => topStores(products), [products]);
+
+  async function handleSave() {
+    const trimmed = name.trim() || user.name;
+    await updateName(trimmed);
+    setName(trimmed);
+    setEditing(false);
+  }
+
+  return (
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Profile</Text>
+
+        <View style={styles.card}>
+          <View style={styles.profileRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials(user.name)}</Text>
+            </View>
+            {editing ? (
+              <View style={{ flex: 1, gap: 6 }}>
+                <TextInput value={name} onChangeText={setName} style={styles.nameInput} />
+                <Text style={styles.email}>{user.email}</Text>
+              </View>
+            ) : (
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{user.name}</Text>
+                <Text style={styles.email}>{user.email}</Text>
+              </View>
+            )}
+            <Pressable
+              style={styles.editBtn}
+              onPress={editing ? handleSave : () => setEditing(true)}
+            >
+              <Text style={styles.editBtnText}>{editing ? 'Save' : 'Edit'}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          {[
+            { label: 'Products', value: products.length },
+            { label: 'Saved', value: favoritedCount },
+            { label: 'Stores', value: stores.length },
+          ].map((stat) => (
+            <View key={stat.label} style={styles.statCard}>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>TOP STORES</Text>
+          {stores.length === 0 ? (
+            <Text style={styles.sectionEmpty}>
+              Install the Lani extension and browse — your most-visited stores show up here.
+            </Text>
+          ) : (
+            stores.map((store) => (
+              <View key={store.domain} style={styles.storeRow}>
+                <Image source={{ uri: faviconUrl(store.domain) }} style={styles.storeFavicon} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.storeHeader}>
+                    <Text style={styles.storeName}>{storeLabel(store.domain)}</Text>
+                    <Text style={styles.storeCount}>{store.count}</Text>
+                  </View>
+                  <View style={styles.storeBarTrack}>
+                    <View style={[styles.storeBarFill, { width: `${store.pct}%` }]} />
+                  </View>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        <Pressable
+          style={styles.signOutBtn}
+          onPress={() => signOut().then(onSignedOut)}
+        >
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+      </ScrollView>
+
+      <BottomNav active="profile" onSelect={onNavigate} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.cream },
+  content: { padding: 16, paddingBottom: 120 },
+  title: { fontSize: 26, fontWeight: '700', color: colors.ink, marginBottom: 16 },
+  card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.ink08,
+    backgroundColor: colors.white,
+    padding: 16,
+    marginBottom: 12,
+  },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(243,105,36,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 18, fontWeight: '700', color: colors.brand },
+  name: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  email: { fontSize: 13, color: colors.ink60, marginTop: 2 },
+  nameInput: {
+    borderWidth: 1,
+    borderColor: colors.ink15,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  editBtn: {
+    borderWidth: 1,
+    borderColor: colors.ink15,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  editBtnText: { fontSize: 13, fontWeight: '600', color: colors.ink },
+  statsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.ink08,
+    backgroundColor: colors.white,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  statValue: { fontSize: 22, fontWeight: '700', color: colors.ink },
+  statLabel: { fontSize: 10, fontWeight: '600', color: colors.ink40, marginTop: 2, textTransform: 'uppercase' },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: colors.ink40, letterSpacing: 0.5 },
+  sectionEmpty: { marginTop: 10, fontSize: 13, color: colors.ink45 },
+  storeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  storeFavicon: { width: 20, height: 20, borderRadius: 4 },
+  storeHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  storeName: { fontSize: 13, fontWeight: '600', color: colors.ink },
+  storeCount: { fontSize: 13, color: colors.ink40 },
+  storeBarTrack: { height: 6, borderRadius: 3, backgroundColor: colors.ink05, marginTop: 4, overflow: 'hidden' },
+  storeBarFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  signOutBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 10 },
+  signOutText: { fontSize: 14, fontWeight: '600', color: colors.ink45 },
+});

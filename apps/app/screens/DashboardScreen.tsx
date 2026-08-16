@@ -4,7 +4,8 @@ import BottomNav from '../components/BottomNav';
 import ProductCard from '../components/ProductCard';
 import QuickFilters, { type FilterChip } from '../components/QuickFilters';
 import type { AuthUser } from '../lib/auth';
-import { getProducts, type Product } from '../lib/products';
+import type { Tab } from '../lib/nav';
+import { getProducts, subscribeToProducts, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
 
 const STOP = new Set([
@@ -29,12 +30,19 @@ function buildFilterChips(products: Product[]): FilterChip[] {
     .map(([key, count]) => ({ key, label: key, count }));
 }
 
-export default function DashboardScreen({ user }: { user: AuthUser }) {
+export default function DashboardScreen({
+  user,
+  onNavigate,
+}: {
+  user: AuthUser;
+  onNavigate: (tab: Tab) => void;
+}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     getProducts().then(setProducts);
+    return subscribeToProducts(() => getProducts().then(setProducts));
   }, []);
 
   const chips = useMemo(() => buildFilterChips(products), [products]);
@@ -96,7 +104,7 @@ export default function DashboardScreen({ user }: { user: AuthUser }) {
           </View>
         )}
       />
-      <BottomNav active="home" />
+      <BottomNav active="home" onSelect={onNavigate} />
     </View>
   );
 }
