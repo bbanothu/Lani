@@ -13,10 +13,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
-import { addToCart, isInCart, subscribeToCart } from '../lib/cart';
-import { sendChat } from '../lib/chat';
+import { addToCart, isInCart, removeFromCart, subscribeToCart } from '../lib/cart';
+import { streamChat } from '../lib/chat';
 import {
   addChatMessage,
   createChatSession,
@@ -26,7 +27,7 @@ import {
   type ChatSession,
 } from '../lib/chat-history';
 import { getLLMSettings, type ChatMessage } from '../lib/llm';
-import { getLists } from '../lib/lists';
+import { addProductToList, getLists, removeProductFromList, type ProductList } from '../lib/lists';
 import type { Tab } from '../lib/nav';
 import { getProducts, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
@@ -46,16 +47,25 @@ type UiMessage = {
 };
 
 const PRODUCTS_TAG = /\[\[products:\s*([^\]]+)\]\]/gi;
+const ACTION_TAG = /\[\[action:(add_cart|remove_cart|favorite|unfavorite|add_list):([^\]]+)\]\]/gi;
+
+type ChatAction =
+  | { type: 'add_cart'; product: Product }
+  | { type: 'remove_cart'; product: Product }
+  | { type: 'add_list'; product: Product; list: ProductList }
+  | { type: 'remove_list'; product: Product; list: ProductList };
 
 function formatProductLine(product: Product, index: number, favoriteIds: Set<string>): string {
   const price = product.price != null ? `${product.currency}${product.price}` : 'price unknown';
   const saved = favoriteIds.has(product.id) ? 'saved' : 'not saved';
-  return `${index + 1}. id=${product.id} | ${product.title} | ${price} | ${product.domain} | ${saved} | ${product.url}`;
+  return `${index + 1}. ${product.title} | ${price} | ${product.domain} | ${saved}`;
 }
 
-async function buildSystemMessage(): Promise<ChatMessage> {
-  const products = await getProducts();
-  const lists = await getLists();
+function stripActionTags(raw: string): string {
+  return raw.replace(ACTION_TAG, '').replace(PRODUCTS_TAG, '').trim();
+}
+
+async function buildSystemMessage(products: Product[], lists: ProductList[]): Promise<ChatMessage> {
   const favoriteIds = new Set(lists.find((l) => l.isFavorites)?.productIds ?? []);
   const catalog =
     products.length === 0
@@ -63,17 +73,27 @@ async function buildSystemMessage(): Promise<ChatMessage> {
       : `The user has ${products.length} product(s) in their Lani list:\n${products
           .map((p, i) => formatProductLine(p, i, favoriteIds))
           .join('\n')}`;
+  const listNames = lists.map((l) => l.title).join(', ') || 'Favorites';
 
   return {
     role: 'system',
     content: [
-      'You are Nora, a friendly shopping assistant for Lani.',
-      'Keep replies concise and helpful. No markdown images. Plain text is fine.',
+      'You are Lani, a friendly shopping assistant.',
+      'Keep replies concise and helpful. No markdown images, no URLs. Plain text is fine.',
       'Use the product list below as your primary context when recommending, comparing, or answering.',
       'Prefer items from this list when relevant. If something is missing, say so.',
       'When you recommend or discuss specific products from the list, end your message with exactly one line:',
-      '[[products:ID1,ID2]]',
-      'Use the product id values from the list. Omit that line if no products apply.',
+      '[[products:1,2]]',
+      'Use the item numbers from the list above (never the product name or a made-up id). Omit that line if no products apply.',
+      '',
+      'You can also take actions the user asks for by including one tag per action, anywhere in your reply (they are removed before the user sees the message, so also confirm the action in plain text):',
+      '[[action:add_cart:N]] -- add item N to the cart',
+      '[[action:remove_cart:N]] -- remove item N from the cart',
+      '[[action:favorite:N]] -- favorite item N',
+      '[[action:unfavorite:N]] -- unfavorite item N',
+      '[[action:add_list:N:LIST_NAME]] -- add item N to a list, using its exact name from the list below',
+      `Lists available: ${listNames}`,
+      'Only take an action when the user actually asks for it.',
       '',
       catalog,
     ].join('\n'),
@@ -83,31 +103,64 @@ async function buildSystemMessage(): Promise<ChatMessage> {
 function parseAssistantReply(
   raw: string,
   catalog: Product[],
-): { content: string; productIds: string[] } {
-  const byId = new Map(catalog.map((p) => [p.id, p]));
+  lists: ProductList[],
+): { content: string; productIds: string[]; actions: ChatAction[] } {
   const ids: string[] = [];
+  const actions: ChatAction[] = [];
+  const favorites = lists.find((l) => l.isFavorites);
 
   const content = raw
+    .replace(ACTION_TAG, (_, type: string, args: string) => {
+      const [indexStr, listName] = args.split(':');
+      const product = catalog[Number(indexStr.trim()) - 1];
+      if (!product) return '';
+      if (!ids.includes(product.id)) ids.push(product.id);
+
+      if (type === 'add_cart' || type === 'remove_cart') {
+        actions.push({ type, product });
+      } else if (type === 'favorite' || type === 'unfavorite') {
+        if (favorites) {
+          actions.push({
+            type: type === 'favorite' ? 'add_list' : 'remove_list',
+            product,
+            list: favorites,
+          });
+        }
+      } else if (type === 'add_list') {
+        const list = lists.find(
+          (l) => l.title.trim().toLowerCase() === (listName || '').trim().toLowerCase(),
+        );
+        if (list) actions.push({ type: 'add_list', product, list });
+      }
+      return '';
+    })
     .replace(PRODUCTS_TAG, (_, list: string) => {
       for (const part of list.split(/[\s,]+/)) {
-        const id = part.trim();
-        if (id && byId.has(id) && !ids.includes(id)) ids.push(id);
+        const product = catalog[Number(part.trim()) - 1];
+        if (product && !ids.includes(product.id)) ids.push(product.id);
       }
       return '';
     })
     .trim();
 
-  if (ids.length === 0) {
-    const lower = content.toLowerCase();
-    for (const product of catalog) {
-      const title = product.title.trim();
-      if (title.length >= 8 && lower.includes(title.toLowerCase()) && !ids.includes(product.id)) {
-        ids.push(product.id);
-      }
+  const lower = content.toLowerCase();
+  for (const product of catalog) {
+    const title = product.title.trim();
+    if (title.length >= 8 && lower.includes(title.toLowerCase()) && !ids.includes(product.id)) {
+      ids.push(product.id);
     }
   }
 
-  return { content: content || '…', productIds: ids };
+  return { content: content || '…', productIds: ids, actions };
+}
+
+async function runChatActions(actions: ChatAction[]): Promise<void> {
+  for (const action of actions) {
+    if (action.type === 'add_cart') await addToCart(action.product);
+    else if (action.type === 'remove_cart') await removeFromCart(action.product.id);
+    else if (action.type === 'add_list') await addProductToList(action.list.id, action.product.id);
+    else await removeProductFromList(action.list.id, action.product.id);
+  }
 }
 
 function RailCard({ product }: { product: Product }) {
@@ -207,7 +260,7 @@ const railStyles = StyleSheet.create({
 const WELCOME_MESSAGE: UiMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
+  content: "Hi — I'm Lani. Ask me about products you've saved, deals, or what to buy next.",
 };
 
 export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
@@ -220,7 +273,26 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
   const [historyVisible, setHistoryVisible] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [listening, setListening] = useState(false);
   const listRef = useRef<FlatList<UiMessage>>(null);
+
+  useSpeechRecognitionEvent('start', () => setListening(true));
+  useSpeechRecognitionEvent('end', () => setListening(false));
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript;
+    if (transcript) setInput(transcript);
+  });
+  useSpeechRecognitionEvent('error', () => setListening(false));
+
+  async function toggleListening() {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!perms.granted) return;
+    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
+  }
 
   useEffect(() => {
     getProducts().then((p) => setCatalog(new Map(p.map((x) => [x.id, x]))));
@@ -235,8 +307,9 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
     if (!trimmed || sending) return;
 
     const userMsg: UiMessage = { id: `u_${Date.now()}`, role: 'user', content: trimmed };
+    const assistantId = `a_${Date.now()}`;
     const next = [...messages, userMsg];
-    setMessages(next);
+    setMessages([...next, { id: assistantId, role: 'assistant', content: '' }]);
     setInput('');
     setSending(true);
     setError(null);
@@ -250,25 +323,33 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
       }
       await addChatMessage(sid, 'user', trimmed);
 
+      const catalog = await getProducts();
+      const lists = await getLists();
       const history: ChatMessage[] = [
-        await buildSystemMessage(),
+        await buildSystemMessage(catalog, lists),
         ...next.map((m) => ({ role: m.role, content: m.content })),
       ];
       const settings = await getLLMSettings();
-      const reply = await sendChat(history, settings);
-      const parsed = parseAssistantReply(reply.trim(), await getProducts());
-      setMessages((current) => [
-        ...current,
-        {
-          id: `a_${Date.now()}`,
-          role: 'assistant',
-          content: parsed.content,
-          productIds: parsed.productIds,
-        },
-      ]);
+      const reply = await streamChat(history, settings, (partial) => {
+        const display = stripActionTags(partial);
+        if (!display) return;
+        setMessages((current) =>
+          current.map((m) => (m.id === assistantId ? { ...m, content: display } : m)),
+        );
+      });
+      const parsed = parseAssistantReply(reply.trim(), catalog, lists);
+      await runChatActions(parsed.actions);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: parsed.content, productIds: parsed.productIds }
+            : m,
+        ),
+      );
       await addChatMessage(sid, 'assistant', parsed.content, parsed.productIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed');
+      setMessages((current) => current.filter((m) => m.id !== assistantId));
     } finally {
       setSending(false);
     }
@@ -303,7 +384,7 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.headerRow}>
-          <Text style={styles.title}>Chat with Nora</Text>
+          <Text style={styles.title}>Chat with Lani</Text>
           <View style={styles.headerActions}>
             <Pressable hitSlop={8} onPress={openHistory} style={styles.headerBtn}>
               <Text style={styles.headerBtnIcon}>🕘</Text>
@@ -336,47 +417,46 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
               <View style={styles.assistantBlock}>
                 <View style={styles.assistantHeader}>
                   <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>N</Text>
+                    <Text style={styles.avatarText}>L</Text>
                   </View>
-                  <Text style={styles.assistantName}>Nora</Text>
+                  <Text style={styles.assistantName}>Lani</Text>
                 </View>
                 <View style={styles.assistantBubble}>
-                  <Text style={styles.assistantText}>{item.content}</Text>
+                  {item.content ? (
+                    <Text style={styles.assistantText}>{item.content}</Text>
+                  ) : (
+                    <View style={styles.thinkingRow}>
+                      <ActivityIndicator size="small" color={colors.ink40} />
+                      <Text style={styles.thinkingText}>Thinking…</Text>
+                    </View>
+                  )}
                 </View>
                 <ProductRail products={cards} />
               </View>
             );
           }}
-          ListFooterComponent={
-            sending ? (
-              <View style={styles.assistantBlock}>
-                <View style={styles.assistantHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>N</Text>
-                  </View>
-                  <Text style={styles.assistantName}>Nora</Text>
-                </View>
-                <View style={styles.thinkingBubble}>
-                  <ActivityIndicator size="small" color={colors.ink40} />
-                  <Text style={styles.thinkingText}>Thinking…</Text>
-                </View>
-              </View>
-            ) : error ? (
-              <Text style={styles.errorText}>{error}</Text>
-            ) : null
-          }
+          ListFooterComponent={error ? <Text style={styles.errorText}>{error}</Text> : null}
         />
 
         <View style={styles.inputBar}>
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="Type a message..."
+            placeholder={listening ? 'Listening…' : 'Type a message...'}
             placeholderTextColor={colors.ink40}
             style={styles.input}
             editable={!sending}
             onSubmitEditing={send}
           />
+          <Pressable
+            onPress={toggleListening}
+            disabled={sending}
+            style={[styles.micBtn, listening && styles.micBtnActive]}
+          >
+            <Text style={[styles.micBtnText, listening && styles.micBtnTextActive]}>
+              {listening ? '◼︎' : '🎤'}
+            </Text>
+          </Pressable>
           <Pressable
             onPress={send}
             disabled={sending || !input.trim()}
@@ -514,18 +594,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   assistantText: { fontSize: 15, lineHeight: 20, color: colors.ink },
-  thinkingBubble: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.ink10,
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignSelf: 'flex-start',
-  },
+  thinkingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   thinkingText: { fontSize: 13, color: colors.ink45 },
   errorText: {
     fontSize: 13,
@@ -563,4 +632,15 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.5 },
   sendBtnText: { color: colors.white, fontSize: 18, fontWeight: '700' },
+  micBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micBtnActive: { backgroundColor: '#be123c' },
+  micBtnText: { fontSize: 18 },
+  micBtnTextActive: { color: colors.white },
 });

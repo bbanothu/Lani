@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/dashboard/BottomNav';
 import { useRequireUser } from '@/lib/auth';
 import { getLLMSettings, type ChatMessage } from '@/lib/llm';
-import { addToCart } from '@/lib/cart';
+import { addToCart, removeFromCart } from '@/lib/cart';
 import { getProducts, subscribeToProducts, type Product } from '@/lib/products';
-import { getLists } from '@/lib/lists';
+import { addProductToList, getLists, removeProductFromList, type ProductList } from '@/lib/lists';
 import {
   addChatMessage,
   createChatSession,
@@ -32,16 +32,25 @@ type UiMessage = {
 };
 
 const PRODUCTS_TAG = /\[\[products:\s*([^\]]+)\]\]/gi;
+const ACTION_TAG = /\[\[action:(add_cart|remove_cart|favorite|unfavorite|add_list):([^\]]+)\]\]/gi;
+
+type ChatAction =
+  | { type: 'add_cart'; product: Product }
+  | { type: 'remove_cart'; product: Product }
+  | { type: 'add_list'; product: Product; list: ProductList }
+  | { type: 'remove_list'; product: Product; list: ProductList };
 
 function formatProductLine(product: Product, index: number, favoriteIds: Set<string>): string {
   const price = product.price != null ? `${product.currency}${product.price}` : 'price unknown';
   const saved = favoriteIds.has(product.id) ? 'saved' : 'not saved';
-  return `${index + 1}. id=${product.id} | ${product.title} | ${price} | ${product.domain} | ${saved} | ${product.url}`;
+  return `${index + 1}. ${product.title} | ${price} | ${product.domain} | ${saved}`;
 }
 
-async function buildSystemMessage(): Promise<ChatMessage> {
-  const products = await getProducts();
-  const lists = await getLists();
+function stripActionTags(raw: string): string {
+  return raw.replace(ACTION_TAG, '').replace(PRODUCTS_TAG, '').trim();
+}
+
+async function buildSystemMessage(products: Product[], lists: ProductList[]): Promise<ChatMessage> {
   const favoriteIds = new Set(lists.find((l) => l.isFavorites)?.productIds ?? []);
   const catalog =
     products.length === 0
@@ -49,17 +58,27 @@ async function buildSystemMessage(): Promise<ChatMessage> {
       : `The user has ${products.length} product(s) in their Lani list:\n${products
           .map((p, i) => formatProductLine(p, i, favoriteIds))
           .join('\n')}`;
+  const listNames = lists.map((l) => l.title).join(', ') || 'Favorites';
 
   return {
     role: 'system',
     content: [
-      'You are Nora, a friendly shopping assistant for Lani.',
-      'Keep replies concise and helpful. No markdown images. Plain text is fine.',
+      'You are Lani, a friendly shopping assistant.',
+      'Keep replies concise and helpful. No markdown images, no URLs. Plain text is fine.',
       'Use the product list below as your primary context when recommending, comparing, or answering.',
       'Prefer items from this list when relevant. If something is missing, say so.',
       'When you recommend or discuss specific products from the list, end your message with exactly one line:',
-      '[[products:ID1,ID2]]',
-      'Use the product id values from the list. Omit that line if no products apply.',
+      '[[products:1,2]]',
+      'Use the item numbers from the list above (never the product name or a made-up id). Omit that line if no products apply.',
+      '',
+      'You can also take actions the user asks for by including one tag per action, anywhere in your reply (they are removed before the user sees the message, so also confirm the action in plain text):',
+      '[[action:add_cart:N]] -- add item N to the cart',
+      '[[action:remove_cart:N]] -- remove item N from the cart',
+      '[[action:favorite:N]] -- favorite item N',
+      '[[action:unfavorite:N]] -- unfavorite item N',
+      '[[action:add_list:N:LIST_NAME]] -- add item N to a list, using its exact name from the list below',
+      `Lists available: ${listNames}`,
+      'Only take an action when the user actually asks for it.',
       '',
       catalog,
     ].join('\n'),
@@ -69,31 +88,64 @@ async function buildSystemMessage(): Promise<ChatMessage> {
 function parseAssistantReply(
   raw: string,
   catalog: Product[],
-): { content: string; productIds: string[] } {
-  const byId = new Map(catalog.map((p) => [p.id, p]));
+  lists: ProductList[],
+): { content: string; productIds: string[]; actions: ChatAction[] } {
   const ids: string[] = [];
+  const actions: ChatAction[] = [];
+  const favorites = lists.find((l) => l.isFavorites);
 
   const content = raw
+    .replace(ACTION_TAG, (_, type: string, args: string) => {
+      const [indexStr, listName] = args.split(':');
+      const product = catalog[Number(indexStr.trim()) - 1];
+      if (!product) return '';
+      if (!ids.includes(product.id)) ids.push(product.id);
+
+      if (type === 'add_cart' || type === 'remove_cart') {
+        actions.push({ type, product });
+      } else if (type === 'favorite' || type === 'unfavorite') {
+        if (favorites) {
+          actions.push({
+            type: type === 'favorite' ? 'add_list' : 'remove_list',
+            product,
+            list: favorites,
+          });
+        }
+      } else if (type === 'add_list') {
+        const list = lists.find(
+          (l) => l.title.trim().toLowerCase() === (listName || '').trim().toLowerCase(),
+        );
+        if (list) actions.push({ type: 'add_list', product, list });
+      }
+      return '';
+    })
     .replace(PRODUCTS_TAG, (_, list: string) => {
       for (const part of list.split(/[\s,]+/)) {
-        const id = part.trim();
-        if (id && byId.has(id) && !ids.includes(id)) ids.push(id);
+        const product = catalog[Number(part.trim()) - 1];
+        if (product && !ids.includes(product.id)) ids.push(product.id);
       }
       return '';
     })
     .trim();
 
-  if (ids.length === 0) {
-    const lower = content.toLowerCase();
-    for (const product of catalog) {
-      const title = product.title.trim();
-      if (title.length >= 8 && lower.includes(title.toLowerCase()) && !ids.includes(product.id)) {
-        ids.push(product.id);
-      }
+  const lower = content.toLowerCase();
+  for (const product of catalog) {
+    const title = product.title.trim();
+    if (title.length >= 8 && lower.includes(title.toLowerCase()) && !ids.includes(product.id)) {
+      ids.push(product.id);
     }
   }
 
-  return { content: content || '…', productIds: ids };
+  return { content: content || '…', productIds: ids, actions };
+}
+
+async function runChatActions(actions: ChatAction[]): Promise<void> {
+  for (const action of actions) {
+    if (action.type === 'add_cart') await addToCart(action.product);
+    else if (action.type === 'remove_cart') await removeFromCart(action.product.id);
+    else if (action.type === 'add_list') await addProductToList(action.list.id, action.product.id);
+    else await removeProductFromList(action.list.id, action.product.id);
+  }
 }
 
 function ChatProductRail({ products }: { products: Product[] }) {
@@ -160,7 +212,7 @@ function ChatProductRail({ products }: { products: Product[] }) {
 const WELCOME_MESSAGE: UiMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: "Hi — I'm Nora. Ask me about products you've saved, deals, or what to buy next.",
+  content: "Hi — I'm Lani. Ask me about products you've saved, deals, or what to buy next.",
 };
 
 export default function ChatPage() {
@@ -175,7 +227,35 @@ export default function ChatPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [listening, setListening] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  function toggleListening() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('Voice input is not supported in this browser.');
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((r) => r[0].transcript)
+        .join('');
+      setInput(transcript);
+    };
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+  }
 
   useEffect(() => {
     if (!ready) return;
@@ -197,8 +277,9 @@ export default function ChatPage() {
       role: 'user',
       content: trimmed,
     };
+    const assistantId = `a_${Date.now()}`;
     const next = [...messages, userMsg];
-    setMessages(next);
+    setMessages([...next, { id: assistantId, role: 'assistant', content: '' }]);
     setInput('');
     setSending(true);
     setError(null);
@@ -212,8 +293,10 @@ export default function ChatPage() {
       }
       await addChatMessage(sid, 'user', trimmed);
 
+      const catalog = await getProducts();
+      const lists = await getLists();
       const history: ChatMessage[] = [
-        await buildSystemMessage(),
+        await buildSystemMessage(catalog, lists),
         ...next.map((m) => ({ role: m.role, content: m.content })),
       ];
       const res = await fetch('/api/chat', {
@@ -221,22 +304,52 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: history, settings: getLLMSettings() }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Chat failed');
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Chat failed');
+      }
 
-      const parsed = parseAssistantReply(String(data.content || '').trim(), await getProducts());
-      setMessages((current) => [
-        ...current,
-        {
-          id: `a_${Date.now()}`,
-          role: 'assistant',
-          content: parsed.content,
-          productIds: parsed.productIds,
-        },
-      ]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let full = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          const trimmed2 = line.trim();
+          if (!trimmed2.startsWith('data:')) continue;
+          try {
+            const { delta } = JSON.parse(trimmed2.slice(5).trim());
+            if (delta) {
+              full += delta;
+              const display = stripActionTags(full);
+              if (display) {
+                setMessages((current) =>
+                  current.map((m) => (m.id === assistantId ? { ...m, content: display } : m)),
+                );
+              }
+            }
+          } catch {}
+        }
+      }
+
+      const parsed = parseAssistantReply(full.trim(), catalog, lists);
+      await runChatActions(parsed.actions);
+      setMessages((current) =>
+        current.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: parsed.content, productIds: parsed.productIds }
+            : m,
+        ),
+      );
       await addChatMessage(sid, 'assistant', parsed.content, parsed.productIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed');
+      setMessages((current) => current.filter((m) => m.id !== assistantId));
     } finally {
       setSending(false);
     }
@@ -275,7 +388,7 @@ export default function ChatPage() {
     <div className="h-dvh overflow-hidden bg-cream">
       <main className="mx-auto my-auto grid h-full w-[90%] max-w-[90%] grid-cols-1 grid-rows-[auto_minmax(0,1fr)] px-4 pt-28 sm:px-6">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h1 className="text-3xl font-bold tracking-tight text-ink">Chat with Nora</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">Chat with Lani</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -319,31 +432,17 @@ export default function ChatPage() {
                 <div key={message.id} className="flex max-w-[92%] flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-                      N
+                      L
                     </span>
-                    <span className="text-sm font-semibold text-ink">Nora</span>
+                    <span className="text-sm font-semibold text-ink">Lani</span>
                   </div>
                   <div className="rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-[15px] leading-relaxed text-ink shadow-sm whitespace-pre-wrap">
-                    {message.content}
+                    {message.content || <span className="text-ink/45">Thinking…</span>}
                   </div>
                   <ChatProductRail products={cards} />
                 </div>
               );
             })}
-
-            {sending ? (
-              <div className="flex max-w-[92%] flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-                    N
-                  </span>
-                  <span className="text-sm font-semibold text-ink">Nora</span>
-                </div>
-                <div className="rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-sm text-ink/45">
-                  Thinking…
-                </div>
-              </div>
-            ) : null}
 
             {error ? (
               <p className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -358,10 +457,40 @@ export default function ChatPage() {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Type a message..."
+                placeholder={listening ? 'Listening…' : 'Type a message...'}
                 className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink/35"
                 disabled={sending}
               />
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={sending}
+                aria-label={listening ? 'Stop voice input' : 'Start voice input'}
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  listening ? 'bg-rose-600 hover:bg-rose-700' : 'bg-brand hover:bg-brand-dark'
+                }`}
+              >
+                {listening ? (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                    <rect x="5" y="5" width="14" height="14" rx="2" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                )}
+              </button>
               <button
                 type="submit"
                 disabled={sending || !input.trim()}
@@ -421,9 +550,7 @@ export default function ChatPage() {
                     onClick={() => loadSession(session)}
                     className="flex w-full items-center justify-between gap-3 border-b border-ink/5 py-3 text-left last:border-b-0"
                   >
-                    <span className="truncate text-sm font-semibold text-ink">
-                      {session.title}
-                    </span>
+                    <span className="truncate text-sm font-semibold text-ink">{session.title}</span>
                     <span className="shrink-0 text-xs text-ink/40">
                       {relativeDay(session.updatedAt)}
                     </span>

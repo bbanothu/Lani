@@ -31,6 +31,15 @@
       "eas": {
         "projectId": "e12f5543-6974-4944-b751-423c2bd086b8"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Lani to use the microphone for voice input.",
+          "speechRecognitionPermission": "Allow Lani to use speech recognition for voice input."
+        }
+      ]
+    ]
   }
 }

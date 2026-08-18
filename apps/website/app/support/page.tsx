@@ -8,7 +8,7 @@ const FAQS = [
   },
   {
     q: 'How do I delete my account?',
-    a: 'Email us at admin@qcsmallbusiness.com from your account\'s address and we\'ll delete your account and data.',
+    a: "Email us at admin@qcsmallbusiness.com from your account's address and we'll delete your account and data.",
   },
   {
     q: 'Is my data shared with anyone?',
