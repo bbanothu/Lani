@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { addToCart, isInCart, removeFromCart, subscribeToCart } from '../lib/cart';
-import { isProductFavorited, subscribeToLists, toggleFavorite } from '../lib/lists';
+import { addToCart, isInCart, removeFromCart } from '../lib/cart';
+import { isProductFavorited, toggleFavorite } from '../lib/lists';
 import type { Product } from '../lib/products';
 import { colors } from '../lib/theme';
 
@@ -24,16 +24,24 @@ export default function ProductCard({ product }: { product: Product }) {
   const [favorited, setFavorited] = useState(false);
 
   useEffect(() => {
-    const sync = () => isInCart(product.id).then(setInCart);
-    sync();
-    return subscribeToCart(sync);
+    isInCart(product.id).then(setInCart);
   }, [product.id]);
 
   useEffect(() => {
-    const sync = () => isProductFavorited(product.id).then(setFavorited);
-    sync();
-    return subscribeToLists(sync);
+    isProductFavorited(product.id).then(setFavorited);
   }, [product.id]);
+
+  const handleToggleFavorite = () => {
+    setFavorited((prev) => !prev);
+    toggleFavorite(product.id).catch(() => setFavorited((prev) => !prev));
+  };
+
+  const handleToggleCart = () => {
+    const wasInCart = inCart;
+    setInCart(!wasInCart);
+    const action = wasInCart ? removeFromCart(product.id) : addToCart(product);
+    action.catch(() => setInCart(wasInCart));
+  };
 
   return (
     <Pressable style={styles.card} onPress={() => Linking.openURL(product.url)}>
@@ -59,20 +67,12 @@ export default function ProductCard({ product }: { product: Product }) {
         <Text style={styles.price}>{price}</Text>
 
         <View style={styles.actions}>
-          <Pressable
-            hitSlop={8}
-            onPress={() => toggleFavorite(product.id)}
-            style={styles.actionBtn}
-          >
+          <Pressable hitSlop={8} onPress={handleToggleFavorite} style={styles.actionBtn}>
             <Text style={[styles.actionGlyph, favorited && styles.actionGlyphActive]}>
               {favorited ? '♥' : '♡'}
             </Text>
           </Pressable>
-          <Pressable
-            hitSlop={8}
-            onPress={() => (inCart ? removeFromCart(product.id) : addToCart(product))}
-            style={styles.actionBtn}
-          >
+          <Pressable hitSlop={8} onPress={handleToggleCart} style={styles.actionBtn}>
             <Text style={[styles.actionGlyph, inCart && styles.actionGlyphActive]}>
               {inCart ? '✓ Cart' : '+ Cart'}
             </Text>

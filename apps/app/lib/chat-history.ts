@@ -72,11 +72,7 @@ export async function getChatMessages(sessionId: string): Promise<StoredChatMess
 }
 
 export async function createChatSession(title: string): Promise<ChatSession> {
-  const { data, error } = await supabase
-    .from('chat_sessions')
-    .insert({ title })
-    .select()
-    .single();
+  const { data, error } = await supabase.from('chat_sessions').insert({ title }).select().single();
   if (error) throw error;
   return sessionFromRow(data);
 }

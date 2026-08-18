@@ -9,8 +9,8 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lani.app",
-      "buildNumber": "1",
+      "bundleIdentifier": "com.brainrotslop.lani",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

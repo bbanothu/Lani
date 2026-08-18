@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
 import { signOut, updateName, type AuthUser } from '../lib/auth';
@@ -24,6 +33,8 @@ const PROVIDERS: { id: LLMProvider; label: string }[] = [
   { id: 'claude', label: 'Claude' },
   { id: 'openrouter', label: 'OpenRouter' },
 ];
+
+const SITE_URL = 'https://lani.brainrotslop.com';
 
 function faviconUrl(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
@@ -225,10 +236,17 @@ export default function ProfileScreen({
           </View>
         )}
 
-        <Pressable
-          style={styles.signOutBtn}
-          onPress={() => signOut().then(onSignedOut)}
-        >
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>ABOUT</Text>
+          <Pressable style={styles.linkRow} onPress={() => Linking.openURL(SITE_URL)}>
+            <Text style={styles.linkText}>Visit our website</Text>
+          </Pressable>
+          <Pressable style={styles.linkRow} onPress={() => Linking.openURL(`${SITE_URL}/support`)}>
+            <Text style={styles.linkText}>Support</Text>
+          </Pressable>
+        </View>
+
+        <Pressable style={styles.signOutBtn} onPress={() => signOut().then(onSignedOut)}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </ScrollView>
@@ -290,15 +308,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: { fontSize: 22, fontWeight: '700', color: colors.ink },
-  statLabel: { fontSize: 10, fontWeight: '600', color: colors.ink40, marginTop: 2, textTransform: 'uppercase' },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.ink40,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: colors.ink40, letterSpacing: 0.5 },
+  linkRow: { paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.ink08, marginTop: 10 },
+  linkText: { fontSize: 14, fontWeight: '600', color: colors.ink },
   sectionEmpty: { marginTop: 10, fontSize: 13, color: colors.ink45 },
   storeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   storeFavicon: { width: 20, height: 20, borderRadius: 4 },
   storeHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   storeName: { fontSize: 13, fontWeight: '600', color: colors.ink },
   storeCount: { fontSize: 13, color: colors.ink40 },
-  storeBarTrack: { height: 6, borderRadius: 3, backgroundColor: colors.ink05, marginTop: 4, overflow: 'hidden' },
+  storeBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.ink05,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
   storeBarFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   signOutBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 10 },
   signOutText: { fontSize: 14, fontWeight: '600', color: colors.ink45 },
@@ -314,7 +346,13 @@ const styles = StyleSheet.create({
   providerChipActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   providerChipText: { fontSize: 12, fontWeight: '600', color: colors.ink60 },
   providerChipTextActive: { color: colors.white },
-  fieldLabel: { marginTop: 14, marginBottom: 6, fontSize: 12, fontWeight: '600', color: colors.ink45 },
+  fieldLabel: {
+    marginTop: 14,
+    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.ink45,
+  },
   llmInput: {
     borderWidth: 1,
     borderColor: colors.ink15,

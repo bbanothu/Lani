@@ -166,7 +166,9 @@ export default function ListsScreen({ onNavigate }: { onNavigate: (tab: Tab) => 
                   </Pressable>
                   <Pressable
                     hitSlop={8}
-                    onPress={() => updateList(item.id, { visibility: nextVisibility(item.visibility) })}
+                    onPress={() =>
+                      updateList(item.id, { visibility: nextVisibility(item.visibility) })
+                    }
                   >
                     <Text style={styles.cardActionText}>Share</Text>
                   </Pressable>
@@ -249,7 +251,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: { fontSize: 26, fontWeight: '700', color: colors.ink },
-  newBtn: { backgroundColor: colors.brand, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  newBtn: {
+    backgroundColor: colors.brand,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   newBtnText: { color: colors.white, fontSize: 13, fontWeight: '600' },
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   filterChip: {

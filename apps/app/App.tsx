@@ -37,9 +37,7 @@ export default function App() {
   } else if (tab === 'lists') {
     screen = <ListsScreen onNavigate={setTab} />;
   } else if (tab === 'profile') {
-    screen = (
-      <ProfileScreen user={user} onNavigate={setTab} onSignedOut={() => setTab('home')} />
-    );
+    screen = <ProfileScreen user={user} onNavigate={setTab} onSignedOut={() => setTab('home')} />;
   } else {
     screen = <DashboardScreen user={user} onNavigate={setTab} />;
   }

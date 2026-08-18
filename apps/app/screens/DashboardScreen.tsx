@@ -10,7 +10,18 @@ import { getProducts, subscribeToProducts, type Product } from '../lib/products'
 import { colors } from '../lib/theme';
 
 const STOP = new Set([
-  'with', 'from', 'that', 'this', 'your', 'into', 'over', 'under', 'and', 'the', 'for', 'set',
+  'with',
+  'from',
+  'that',
+  'this',
+  'your',
+  'into',
+  'over',
+  'under',
+  'and',
+  'the',
+  'for',
+  'set',
 ]);
 
 function buildFilterChips(products: Product[]): FilterChip[] {
