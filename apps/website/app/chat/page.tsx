@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/dashboard/BottomNav';
 import { useRequireUser } from '@/lib/auth';
-import { getLLMSettings, type ChatMessage } from '@/lib/llm';
+import { DEFAULT_LLM_SETTINGS, getLLMSettings, type ChatMessage } from '@/lib/llm';
 import { addToCart, removeFromCart } from '@/lib/cart';
 import { getProducts, subscribeToProducts, type Product } from '@/lib/products';
 import { addProductToList, getLists, removeProductFromList, type ProductList } from '@/lib/lists';
@@ -137,6 +137,23 @@ function parseAssistantReply(
   }
 
   return { content: content || '…', productIds: ids, actions };
+}
+
+async function readSSELines(
+  body: ReadableStream<Uint8Array>,
+  onLine: (line: string) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) onLine(line);
+  }
 }
 
 async function runChatActions(actions: ChatAction[]): Promise<void> {
@@ -299,42 +316,65 @@ export default function ChatPage() {
         await buildSystemMessage(catalog, lists),
         ...next.map((m) => ({ role: m.role, content: m.content })),
       ];
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history, settings: getLLMSettings() }),
-      });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Chat failed');
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      const settings = getLLMSettings();
       let full = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
+      const pushDelta = (delta: string) => {
+        full += delta;
+        const display = stripActionTags(full);
+        if (display) {
+          setMessages((current) =>
+            current.map((m) => (m.id === assistantId ? { ...m, content: display } : m)),
+          );
+        }
+      };
+
+      if (settings.provider === 'ollama') {
+        // Ollama runs on the user's own machine/LAN -- the deployed server can never
+        // reach it, so this request must go straight from the browser.
+        const baseUrl = settings.ollamaBaseUrl || DEFAULT_LLM_SETTINGS.ollamaBaseUrl!;
+        const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: settings.model,
+            messages: history,
+            max_tokens: 800,
+            temperature: 0.5,
+            stream: true,
+          }),
+        });
+        if (!res.ok || !res.body) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`Ollama error: ${res.status} ${text}`.trim());
+        }
+        await readSSELines(res.body, (line) => {
           const trimmed2 = line.trim();
-          if (!trimmed2.startsWith('data:')) continue;
+          if (!trimmed2.startsWith('data:')) return;
+          const data = trimmed2.slice(5).trim();
+          if (data === '[DONE]') return;
+          try {
+            const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+            if (delta) pushDelta(delta);
+          } catch {}
+        });
+      } else {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history, settings }),
+        });
+        if (!res.ok || !res.body) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Chat failed');
+        }
+        await readSSELines(res.body, (line) => {
+          const trimmed2 = line.trim();
+          if (!trimmed2.startsWith('data:')) return;
           try {
             const { delta } = JSON.parse(trimmed2.slice(5).trim());
-            if (delta) {
-              full += delta;
-              const display = stripActionTags(full);
-              if (display) {
-                setMessages((current) =>
-                  current.map((m) => (m.id === assistantId ? { ...m, content: display } : m)),
-                );
-              }
-            }
+            if (delta) pushDelta(delta);
           } catch {}
-        }
+        });
       }
 
       const parsed = parseAssistantReply(full.trim(), catalog, lists);

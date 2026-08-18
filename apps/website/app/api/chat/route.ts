@@ -44,17 +44,15 @@ export async function POST(req: Request) {
         }),
       });
       extractDelta = (json) => (json.type === 'content_block_delta' ? json.delta?.text : undefined);
-    } else {
-      const useAuth = settings.provider === 'openrouter';
-      const baseUrl = useAuth
-        ? 'https://openrouter.ai/api/v1'
-        : settings.ollamaBaseUrl || DEFAULT_LLM_SETTINGS.ollamaBaseUrl!;
-      if (useAuth && !settings.apiKey) {
+    } else if (settings.provider === 'openrouter') {
+      if (!settings.apiKey) {
         return NextResponse.json({ error: 'OpenRouter API key missing' }, { status: 400 });
       }
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (useAuth) headers.Authorization = `Bearer ${settings.apiKey}`;
-      upstream = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      };
+      upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -66,6 +64,11 @@ export async function POST(req: Request) {
         }),
       });
       extractDelta = (json) => json.choices?.[0]?.delta?.content;
+    } else {
+      return NextResponse.json(
+        { error: 'Ollama requests must be sent directly from the browser, not through this route' },
+        { status: 400 },
+      );
     }
   } catch (error) {
     return NextResponse.json(

@@ -40,7 +40,10 @@ async function openAICompatibleCompletion(
   });
 
   if (!response.ok) {
-    throw new Error(`${baseUrl} error: ${response.statusText}`);
+    // statusText is always empty on HTTP/2 responses (no reason-phrase in
+    // the h2 status line), so fall back to the body for anything useful.
+    const body = await response.text().catch(() => '');
+    throw new Error(`${baseUrl} error: ${response.status} ${response.statusText} ${body}`.trim());
   }
   const data = await response.json();
   return data.choices[0].message.content;
@@ -52,7 +55,7 @@ export async function listOllamaModels(baseUrl: string): Promise<string[]> {
   const host = baseUrl.replace(/\/v1\/?$/, '');
   const response = await fetch(`${host}/api/tags`);
   if (!response.ok) {
-    throw new Error(`Could not reach Ollama at ${host}`);
+    throw new Error(`Could not reach Ollama at ${host} (${response.status})`);
   }
   const data = await response.json();
   return (data.models || []).map((m: { name: string }) => m.name);
@@ -76,7 +79,8 @@ async function claudeCompletion(prompt: string, settings: LLMSettings): Promise<
   });
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.statusText}`);
+    const body = await response.text().catch(() => '');
+    throw new Error(`Claude API error: ${response.status} ${response.statusText} ${body}`.trim());
   }
   const data = await response.json();
   const textBlock = data.content.find((b: any) => b.type === 'text');

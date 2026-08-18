@@ -3,8 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { addToCart, isInCart, removeFromCart, subscribeToCart } from '@/lib/cart';
-import { isProductFavorited, subscribeToLists, toggleFavorite } from '@/lib/lists';
+import { addToCart, isInCart, removeFromCart } from '@/lib/cart';
+import { isProductFavorited, toggleFavorite } from '@/lib/lists';
 import { popups } from '@/lib/popups';
 import { Product, removeProduct } from '@/lib/products';
 
@@ -65,16 +65,24 @@ export default function ProductCard({ product }: { product: Product }) {
   const [favorited, setFavorited] = useState(false);
 
   useEffect(() => {
-    const sync = () => isInCart(product.id).then(setInCart);
-    sync();
-    return subscribeToCart(sync);
+    isInCart(product.id).then(setInCart);
   }, [product.id]);
 
   useEffect(() => {
-    const sync = () => isProductFavorited(product.id).then(setFavorited);
-    sync();
-    return subscribeToLists(sync);
+    isProductFavorited(product.id).then(setFavorited);
   }, [product.id]);
+
+  function handleToggleFavorite() {
+    setFavorited((prev) => !prev);
+    toggleFavorite(product.id).catch(() => setFavorited((prev) => !prev));
+  }
+
+  function handleToggleCart() {
+    const wasInCart = inCart;
+    setInCart(!wasInCart);
+    const action = wasInCart ? removeFromCart(product.id) : addToCart(product);
+    action.catch(() => setInCart(wasInCart));
+  }
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-[0_1px_3px_rgba(28,27,26,0.04)] transition-shadow hover:shadow-[0_8px_24px_rgba(28,27,26,0.08)]">
@@ -119,7 +127,7 @@ export default function ProductCard({ product }: { product: Product }) {
         <IconButton
           label={favorited ? 'Unsave' : 'Save'}
           active={favorited}
-          onClick={() => toggleFavorite(product.id)}
+          onClick={handleToggleFavorite}
         >
           <svg
             viewBox="0 0 24 24"
@@ -138,7 +146,7 @@ export default function ProductCard({ product }: { product: Product }) {
         <IconButton
           label={inCart ? 'In cart' : 'Add to cart'}
           active={inCart}
-          onClick={() => (inCart ? removeFromCart(product.id) : addToCart(product))}
+          onClick={handleToggleCart}
         >
           <svg
             viewBox="0 0 24 24"

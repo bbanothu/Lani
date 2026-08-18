@@ -5,7 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useRequireUser, signOut, updateName } from '@/lib/auth';
 import { Product, getProducts, subscribeToProducts } from '@/lib/products';
 import { getLists, subscribeToLists } from '@/lib/lists';
+import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '@/lib/llm';
 import BottomNav from '@/components/dashboard/BottomNav';
+
+const PROVIDERS: { id: LLMProvider; label: string }[] = [
+  { id: 'ollama', label: 'Ollama' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'openrouter', label: 'OpenRouter' },
+];
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -55,6 +62,8 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [favoritedCount, setFavoritedCount] = useState(0);
+  const [llm, setLlm] = useState<LLMSettings | null>(null);
+  const [llmSaved, setLlmSaved] = useState(false);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -65,6 +74,10 @@ export default function ProfilePage() {
     });
     return unsubscribe;
   }, [ready, user]);
+
+  useEffect(() => {
+    setLlm(getLLMSettings());
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -91,6 +104,13 @@ export default function ProfilePage() {
   async function handleSignOut() {
     await signOut();
     router.push('/login');
+  }
+
+  function handleSaveLlm() {
+    if (!llm) return;
+    saveLLMSettings(llm);
+    setLlmSaved(true);
+    setTimeout(() => setLlmSaved(false), 1500);
   }
 
   return (
@@ -202,6 +222,78 @@ export default function ProfilePage() {
             </div>
           )}
         </section>
+
+        {llm ? (
+          <section className="mt-4 rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
+            <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/35">AI ASSISTANT</p>
+
+            <div className="mt-3 flex gap-2">
+              {PROVIDERS.map((p) => {
+                const active = llm.provider === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setLlm({ ...llm, provider: p.id })}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                      active
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-ink/10 text-ink/60 hover:bg-ink/5'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <label className="mt-4 block text-xs font-semibold text-ink/45">Model</label>
+            <input
+              type="text"
+              value={llm.model}
+              onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+              placeholder="e.g. llama3.1"
+              autoCapitalize="none"
+              className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
+
+            {llm.provider === 'ollama' ? (
+              <>
+                <label className="mt-4 block text-xs font-semibold text-ink/45">
+                  Ollama base URL
+                </label>
+                <input
+                  type="text"
+                  value={llm.ollamaBaseUrl}
+                  onChange={(e) => setLlm({ ...llm, ollamaBaseUrl: e.target.value })}
+                  placeholder="http://127.0.0.1:11434/v1"
+                  autoCapitalize="none"
+                  className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+              </>
+            ) : (
+              <>
+                <label className="mt-4 block text-xs font-semibold text-ink/45">API key</label>
+                <input
+                  type="password"
+                  value={llm.apiKey}
+                  onChange={(e) => setLlm({ ...llm, apiKey: e.target.value })}
+                  placeholder="sk-..."
+                  autoCapitalize="none"
+                  className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSaveLlm}
+              className="mt-4 w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
+            >
+              {llmSaved ? 'Saved ✓' : 'Save'}
+            </button>
+          </section>
+        ) : null}
 
         <button
           type="button"
