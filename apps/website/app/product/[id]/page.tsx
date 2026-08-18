@@ -3,7 +3,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRequireUser } from '@/lib/auth';
-import { Product, getProduct, removeProduct } from '@/lib/products';
+import {
+  Product,
+  PricePoint,
+  getPriceHistory,
+  getProduct,
+  removeProduct,
+  trackProduct,
+  untrackProduct,
+} from '@/lib/products';
 import { addToCart, isInCart, removeFromCart, subscribeToCart } from '@/lib/cart';
 import { isProductFavorited, subscribeToLists, toggleFavorite } from '@/lib/lists';
 import { popups } from '@/lib/popups';
@@ -38,14 +46,11 @@ function mockStoreComparison(
   return [current, ...others].sort((a, b) => a.price - b.price);
 }
 
-function mockPriceHistory(product: Product): { label: string; price: number }[] {
-  const base = product.price ?? 50;
-  const points = ['30d ago', '14d ago', '7d ago', 'Today'];
-  return points.map((label, i) => {
-    if (label === 'Today') return { label, price: base };
-    const swing = 1 + (seededRandom(product.id + label) - 0.3) * 0.25;
-    return { label, price: Math.round(base * swing * 100) / 100 };
-  });
+function relativeDay(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'Today';
+  if (days === 1) return '1d ago';
+  return `${days}d ago`;
 }
 
 function IconButton({
@@ -80,6 +85,9 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
   const [product, setProduct] = useState<Product | null>(null);
   const [inCart, setInCart] = useState(false);
   const [favorited, setFavorited] = useState(false);
+  const [tracking, setTracking] = useState(false);
+  const [history, setHistory] = useState<PricePoint[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
@@ -99,6 +107,28 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
     sync();
     return subscribeToLists(sync);
   }, [product]);
+
+  useEffect(() => {
+    if (!product) return;
+    setTracking(product.tracking);
+    if (product.trackedProductId) {
+      getPriceHistory(product.trackedProductId).then(setHistory);
+    }
+  }, [product]);
+
+  function handleToggleTracking() {
+    if (!product) return;
+    const wasTracking = tracking;
+    setTracking(!wasTracking);
+    const action = wasTracking ? untrackProduct(product.id) : trackProduct(product.id);
+    action
+      .then(() => getProduct(product.id))
+      .then((fresh) => {
+        setProduct(fresh);
+        if (fresh?.trackedProductId) getPriceHistory(fresh.trackedProductId).then(setHistory);
+      })
+      .catch(() => setTracking(wasTracking));
+  }
 
   if (!ready || !user) return null;
 
@@ -134,13 +164,16 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
 
   const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
   const stores = mockStoreComparison(product);
-  const history = mockPriceHistory(product);
-  const maxHistoryPrice = Math.max(...history.map((h) => h.price), 1);
+  const maxHistoryPrice = Math.max(...history.map((h) => h.price ?? 0), 1);
   const tags = product.tags?.length ? product.tags : [storeLabel(product.domain)];
 
   return (
     <div className="min-h-screen bg-cream pb-28">
-      <main className="mx-auto max-w-4xl px-4 pb-8 pt-8 sm:px-6">
+      <main
+        className={`mx-auto max-w-4xl px-4 pb-8 pt-8 sm:px-6 transition-all duration-200 ${
+          deleting ? 'scale-95 opacity-0' : 'scale-100 opacity-100'
+        }`}
+      >
         <button
           type="button"
           onClick={() => router.back()}
@@ -231,6 +264,25 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
                 </svg>
               </IconButton>
               <IconButton
+                label={tracking ? 'Tracking price' : 'Track price'}
+                active={tracking}
+                onClick={handleToggleTracking}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path
+                    d="M4 19V5M4 19h16M8 15l3-4 3 2 5-7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </IconButton>
+              <IconButton
                 label="Add to list"
                 onClick={() => popups.listPicker({ productId: product.id })}
               >
@@ -251,8 +303,9 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
               <IconButton
                 label="Delete"
                 onClick={() => {
-                  removeProduct(product.id);
-                  router.push('/dashboard');
+                  setDeleting(true);
+                  removeProduct(product.id).catch(() => setDeleting(false));
+                  setTimeout(() => router.push('/dashboard'), 220);
                 }}
               >
                 <svg
@@ -329,24 +382,37 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
               <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/35">
                 PRICE HISTORY
               </p>
-              <div className="mt-5 flex items-end justify-between gap-3">
-                {history.map((point, i) => (
-                  <div key={point.label} className="flex flex-1 flex-col items-center gap-2">
-                    <div className="flex h-20 w-full items-end justify-center">
-                      <div
-                        className={`w-6 rounded-full transition-all ${
-                          i === history.length - 1 ? 'bg-brand' : 'bg-ink/10'
-                        }`}
-                        style={{ height: `${Math.max(8, (point.price / maxHistoryPrice) * 100)}%` }}
-                      />
+              {!tracking ? (
+                <p className="mt-3 text-sm text-ink/45">
+                  Not tracked yet -- tap the price-trend icon above to start tracking. Prices are
+                  rechecked once a day.
+                </p>
+              ) : history.length < 2 ? (
+                <p className="mt-3 text-sm text-ink/45">
+                  Tracking started -- check back after the next daily price check for a trend.
+                </p>
+              ) : (
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  {history.map((point, i) => (
+                    <div key={point.checkedAt} className="flex flex-1 flex-col items-center gap-2">
+                      <div className="flex h-20 w-full items-end justify-center">
+                        <div
+                          className={`w-6 rounded-full transition-all ${
+                            i === history.length - 1 ? 'bg-brand' : 'bg-ink/10'
+                          }`}
+                          style={{
+                            height: `${Math.max(8, ((point.price ?? 0) / maxHistoryPrice) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[11px] font-semibold text-ink">
+                        {point.price != null ? `$${point.price.toLocaleString()}` : '—'}
+                      </p>
+                      <p className="text-[10px] text-ink/35">{relativeDay(point.checkedAt)}</p>
                     </div>
-                    <p className="text-[11px] font-semibold text-ink">
-                      ${point.price.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] text-ink/35">{point.label}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         </div>

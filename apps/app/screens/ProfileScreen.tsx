@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   Linking,
   Pressable,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from '../components/BottomNav';
-import { signOut, updateName, type AuthUser } from '../lib/auth';
+import { deleteAccount, signOut, updateName, type AuthUser } from '../lib/auth';
 import { getLists, subscribeToLists } from '../lib/lists';
 import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '../lib/llm';
 import type { Tab } from '../lib/nav';
@@ -101,6 +102,25 @@ export default function ProfileScreen({
     await saveLLMSettings(llm);
     setLlmSaved(true);
     setTimeout(() => setLlmSaved(false), 1500);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete account',
+      "This permanently deletes your account and all your data -- products, lists, cart, and chat history. This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const error = await deleteAccount();
+            if (error) Alert.alert('Could not delete account', error);
+            else onSignedOut();
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -249,6 +269,10 @@ export default function ProfileScreen({
         <Pressable style={styles.signOutBtn} onPress={() => signOut().then(onSignedOut)}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
+
+        <Pressable style={styles.signOutBtn} onPress={handleDeleteAccount}>
+          <Text style={styles.deleteAccountText}>Delete account</Text>
+        </Pressable>
       </ScrollView>
 
       <BottomNav active="profile" onSelect={onNavigate} />
@@ -334,6 +358,7 @@ const styles = StyleSheet.create({
   storeBarFill: { height: 6, borderRadius: 3, backgroundColor: colors.brand },
   signOutBtn: { marginTop: 8, alignItems: 'center', paddingVertical: 10 },
   signOutText: { fontSize: 14, fontWeight: '600', color: colors.ink45 },
+  deleteAccountText: { fontSize: 14, fontWeight: '600', color: '#be123c' },
   providerRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   providerChip: {
     flex: 1,

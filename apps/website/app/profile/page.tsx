@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useRequireUser, signOut, updateName } from '@/lib/auth';
+import { useRequireUser, signOut, updateName, deleteAccount } from '@/lib/auth';
 import { Product, getProducts, subscribeToProducts } from '@/lib/products';
 import { getLists, subscribeToLists } from '@/lib/lists';
 import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '@/lib/llm';
@@ -64,6 +64,8 @@ export default function ProfilePage() {
   const [favoritedCount, setFavoritedCount] = useState(0);
   const [llm, setLlm] = useState<LLMSettings | null>(null);
   const [llmSaved, setLlmSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -111,6 +113,18 @@ export default function ProfilePage() {
     saveLLMSettings(llm);
     setLlmSaved(true);
     setTimeout(() => setLlmSaved(false), 1500);
+  }
+
+  async function handleDeleteAccount() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      setTimeout(() => setConfirmDelete(false), 4000);
+      return;
+    }
+    setDeleteError(null);
+    const error = await deleteAccount();
+    if (error) setDeleteError(error);
+    else router.push('/login');
   }
 
   return (
@@ -295,13 +309,24 @@ export default function ProfilePage() {
           </section>
         ) : null}
 
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="mt-6 text-sm font-medium text-ink/45 transition-colors hover:text-red-500"
-        >
-          Sign out
-        </button>
+        <div className="mt-6 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="text-sm font-medium text-ink/45 transition-colors hover:text-red-500"
+          >
+            Sign out
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            className="text-sm font-medium text-red-600 transition-colors hover:text-red-700"
+          >
+            {confirmDelete ? 'Tap again to confirm' : 'Delete account'}
+          </button>
+        </div>
+        {deleteError ? <p className="mt-2 text-right text-sm text-red-600">{deleteError}</p> : null}
       </main>
 
       <BottomNav

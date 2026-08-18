@@ -10,9 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.brainrotslop.lani",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Lani does not access your photo library. This permission is declared only because a bundled system library references it."
       }
     },
     "android": {

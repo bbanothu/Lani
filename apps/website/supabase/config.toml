@@ -412,3 +412,9 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+[functions.rescrape-prices]
+# Invoked by pg_cron (no user JWT available), so it can't require one --
+# it's protected by only ever touching the tracked_products table via its
+# own service-role key, not by anything the caller provides.
+verify_jwt = false

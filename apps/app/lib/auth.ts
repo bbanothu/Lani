@@ -42,6 +42,14 @@ export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+/** Permanently deletes the signed-in user's account and all their data. */
+export async function deleteAccount(): Promise<string | null> {
+  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  if (error) return error.message;
+  await supabase.auth.signOut();
+  return null;
+}
+
 export async function updateName(name: string): Promise<string | null> {
   const { error } = await supabase.auth.updateUser({ data: { name } });
   return error?.message ?? null;

@@ -2,11 +2,10 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { addToCart, isInCart, removeFromCart } from '@/lib/cart';
 import { isProductFavorited, toggleFavorite } from '@/lib/lists';
 import { popups } from '@/lib/popups';
-import { Product, removeProduct } from '@/lib/products';
+import { Product, removeProduct, trackProduct, untrackProduct } from '@/lib/products';
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -57,12 +56,19 @@ function IconButton({
   );
 }
 
-export default function ProductCard({ product }: { product: Product }) {
-  const router = useRouter();
+export default function ProductCard({
+  product,
+  onDeleted,
+}: {
+  product: Product;
+  onDeleted?: () => void;
+}) {
   const tags = hintTags(product);
   const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
   const [inCart, setInCart] = useState(false);
   const [favorited, setFavorited] = useState(false);
+  const [tracking, setTracking] = useState(product.tracking);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     isInCart(product.id).then(setInCart);
@@ -84,8 +90,25 @@ export default function ProductCard({ product }: { product: Product }) {
     action.catch(() => setInCart(wasInCart));
   }
 
+  function handleToggleTracking() {
+    const wasTracking = tracking;
+    setTracking(!wasTracking);
+    const action = wasTracking ? untrackProduct(product.id) : trackProduct(product.id);
+    action.catch(() => setTracking(wasTracking));
+  }
+
+  function handleDelete() {
+    setDeleting(true);
+    removeProduct(product.id).catch(() => setDeleting(false));
+    setTimeout(() => onDeleted?.(), 220);
+  }
+
   return (
-    <article className="flex flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-[0_1px_3px_rgba(28,27,26,0.04)] transition-shadow hover:shadow-[0_8px_24px_rgba(28,27,26,0.08)]">
+    <article
+      className={`flex flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-[0_1px_3px_rgba(28,27,26,0.04)] transition-all duration-200 hover:shadow-[0_8px_24px_rgba(28,27,26,0.08)] ${
+        deleting ? 'scale-90 opacity-0' : 'scale-100 opacity-100'
+      }`}
+    >
       <div className="flex items-center justify-between px-3.5 pt-3 text-[11px] text-ink/40">
         <span className="truncate font-medium lowercase">{retailerLabel(product.domain)}</span>
         <span className="shrink-0">{relativeTime(product.addedAt)}</span>
@@ -162,7 +185,11 @@ export default function ProductCard({ product }: { product: Product }) {
             />
           </svg>
         </IconButton>
-        <IconButton label="Price trend" onClick={() => router.push(`/product/${product.id}`)}>
+        <IconButton
+          label={tracking ? 'Tracking price' : 'Track price'}
+          active={tracking}
+          onClick={handleToggleTracking}
+        >
           <svg
             viewBox="0 0 24 24"
             className="h-4 w-4"
@@ -195,7 +222,7 @@ export default function ProductCard({ product }: { product: Product }) {
             />
           </svg>
         </IconButton>
-        <IconButton label="Delete" onClick={() => removeProduct(product.id)}>
+        <IconButton label="Delete" onClick={handleDelete}>
           <svg
             viewBox="0 0 24 24"
             className="h-4 w-4"

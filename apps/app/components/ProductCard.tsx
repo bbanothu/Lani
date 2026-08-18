@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { addToCart, isInCart, removeFromCart } from '../lib/cart';
 import { isProductFavorited, toggleFavorite } from '../lib/lists';
-import type { Product } from '../lib/products';
+import { trackProduct, untrackProduct, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
 
 function relativeTime(iso: string): string {
@@ -22,6 +22,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
   const [inCart, setInCart] = useState(false);
   const [favorited, setFavorited] = useState(false);
+  const [tracking, setTracking] = useState(product.tracking);
 
   useEffect(() => {
     isInCart(product.id).then(setInCart);
@@ -41,6 +42,13 @@ export default function ProductCard({ product }: { product: Product }) {
     setInCart(!wasInCart);
     const action = wasInCart ? removeFromCart(product.id) : addToCart(product);
     action.catch(() => setInCart(wasInCart));
+  };
+
+  const handleToggleTracking = () => {
+    const wasTracking = tracking;
+    setTracking(!wasTracking);
+    const action = wasTracking ? untrackProduct(product.id) : trackProduct(product.id);
+    action.catch(() => setTracking(wasTracking));
   };
 
   return (
@@ -75,6 +83,11 @@ export default function ProductCard({ product }: { product: Product }) {
           <Pressable hitSlop={8} onPress={handleToggleCart} style={styles.actionBtn}>
             <Text style={[styles.actionGlyph, inCart && styles.actionGlyphActive]}>
               {inCart ? '✓ Cart' : '+ Cart'}
+            </Text>
+          </Pressable>
+          <Pressable hitSlop={8} onPress={handleToggleTracking} style={styles.actionBtn}>
+            <Text style={[styles.actionGlyph, tracking && styles.actionGlyphActive]}>
+              {tracking ? '📈 Tracking' : '📈 Track'}
             </Text>
           </Pressable>
         </View>

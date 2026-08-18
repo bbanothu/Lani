@@ -243,7 +243,13 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
         ) : (
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {items.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                onDeleted={() =>
+                  setProducts((current) => current.filter((x) => x.id !== product.id))
+                }
+              />
             ))}
           </div>
         )}
