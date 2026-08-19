@@ -12,18 +12,18 @@ const SECTIONS = [
   },
   {
     h: 'The browser extension',
-    p: 'The Lani extension reads the page you\'re currently viewing to detect whether it\'s a product page (title, price, image, and URL) and asks your chosen AI model to confirm before saving anything. It does not read pages when paused, and it does not run on tabs unrelated to shopping unless it needs to check whether they\'re a product page.',
+    p: "The Lani extension reads the page you're currently viewing to detect whether it's a product page (title, price, image, and URL) and asks your chosen AI model to confirm before saving anything. It does not read pages when paused, and it does not run on tabs unrelated to shopping unless it needs to check whether they're a product page.",
   },
   {
     h: 'AI chat',
-    p: 'You choose and connect your own AI provider -- Anthropic Claude, OpenRouter, or a self-hosted Ollama instance -- in Profile settings. Your API key is stored only on your own device (browser local storage or app storage) and is never sent to our servers. Messages you send in chat go directly from your device to the provider you picked, subject to that provider\'s own privacy policy.',
+    p: "You choose and connect your own AI provider -- Anthropic Claude, OpenRouter, or a self-hosted Ollama instance -- in Profile settings. Your API key is stored only on your own device (browser local storage or app storage) and is never sent to our servers. Messages you send in chat go directly from your device to the provider you picked, subject to that provider's own privacy policy.",
   },
   {
     h: 'Price tracking',
     p: "If you tap Track on a product, we store its URL and price so we can check it once a day and let you know if the price changed. Tracked URLs are deduplicated across users -- we don't attach your identity to the tracking record itself, only to the fact that one of your saved products links to it.",
   },
   {
-    h: 'What we don\'t do',
+    h: "What we don't do",
     p: "We don't sell your data, run ads, or use third-party analytics or tracking scripts on the app or website.",
   },
   {
@@ -32,7 +32,7 @@ const SECTIONS = [
   },
   {
     h: 'Questions',
-    p: 'Email admin@qcsmallbusiness.com and we\'ll get back to you.',
+    p: "Email admin@qcsmallbusiness.com and we'll get back to you.",
   },
 ];
 
