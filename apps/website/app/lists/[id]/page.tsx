@@ -51,11 +51,15 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
   const { user, ready } = useRequireUser();
   const [list, setList] = useState<ProductList | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ready) return;
     const sync = () => {
-      getList(params.id).then(setList);
+      getList(params.id).then((l) => {
+        setList(l);
+        setLoading(false);
+      });
       getProducts().then(setProducts);
     };
     sync();
@@ -116,6 +120,19 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
   }
 
   if (!ready || !user) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cream pb-28">
+        <main className="mx-auto max-w-2xl px-4 pb-8 pt-8 text-center sm:px-6">
+          <div className="flex flex-col items-center justify-center gap-3 py-24">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/15 border-t-brand" />
+            <p className="text-sm text-ink/45">Loading list…</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!list) {
     return (
@@ -242,10 +259,11 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {items.map((product) => (
+            {items.map((product, i) => (
               <ProductCard
                 key={product.id}
                 product={product}
+                index={i}
                 onDeleted={() =>
                   setProducts((current) => current.filter((x) => x.id !== product.id))
                 }

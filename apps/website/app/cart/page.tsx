@@ -46,11 +46,16 @@ export default function CartPage() {
   const router = useRouter();
   const { user, ready } = useRequireUser();
   const [items, setItems] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     if (!ready) return;
-    const sync = () => getCart().then(setItems);
+    const sync = () =>
+      getCart().then((c) => {
+        setItems(c);
+        setLoading(false);
+      });
     sync();
     return subscribeToCart(sync);
   }, [ready]);
@@ -167,7 +172,12 @@ export default function CartPage() {
           </aside>
 
           <section className="space-y-4">
-            {items.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/15 border-t-brand" />
+                <p className="text-sm text-ink/45">Loading your cart…</p>
+              </div>
+            ) : items.length === 0 ? (
               <div className="rounded-[28px] border border-ink/8 bg-white px-6 py-16 text-center shadow-sm">
                 <p className="text-lg font-semibold text-ink">Your cart is empty</p>
                 <p className="mt-2 text-sm text-ink/45">
@@ -182,13 +192,14 @@ export default function CartPage() {
                 </button>
               </div>
             ) : (
-              groups.map((group) => {
+              groups.map((group, groupIndex) => {
                 const subtotal = group.items.reduce((sum, item) => sum + (item.price ?? 0), 0);
                 const isCollapsed = collapsed.has(group.domain);
                 return (
                   <div
                     key={group.domain}
-                    className="overflow-hidden rounded-[28px] border border-ink/8 bg-white shadow-sm"
+                    style={{ animationDelay: `${Math.min(groupIndex, 20) * 60}ms` }}
+                    className="animate-fade-in overflow-hidden rounded-[28px] border border-ink/8 bg-white shadow-sm"
                   >
                     <button
                       type="button"
@@ -224,10 +235,11 @@ export default function CartPage() {
 
                     {!isCollapsed ? (
                       <div className="space-y-3 px-4 pb-4">
-                        {group.items.map((item) => (
+                        {group.items.map((item, itemIndex) => (
                           <article
                             key={item.id}
-                            className="flex items-center gap-4 rounded-2xl bg-[#F3F3F1] px-3 py-3"
+                            style={{ animationDelay: `${Math.min(itemIndex, 20) * 40}ms` }}
+                            className="animate-fade-in flex items-center gap-4 rounded-2xl bg-[#F3F3F1] px-3 py-3"
                           >
                             <a
                               href={item.url}

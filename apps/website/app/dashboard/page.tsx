@@ -11,6 +11,9 @@ import QuickFilters, { type FilterChip } from '@/components/dashboard/QuickFilte
 import RetailerRail from '@/components/dashboard/RetailerRail';
 import BottomNav from '@/components/dashboard/BottomNav';
 
+type SortKey = 'date' | 'name' | 'price';
+type SortDir = 'asc' | 'desc';
+
 const STOP = new Set([
   'with',
   'from',
@@ -48,13 +51,19 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, ready } = useRequireUser();
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set());
   const [retailer, setRetailer] = useState<string | null>(null);
   const [customChips, setCustomChips] = useState<FilterChip[]>([]);
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   useEffect(() => {
     if (!ready) return;
-    getProducts().then(setProducts);
+    getProducts().then((p) => {
+      setProducts(p);
+      setLoading(false);
+    });
     const unsubscribe = subscribeToProducts(() => {
       getProducts().then(setProducts);
     });
@@ -81,9 +90,27 @@ export default function DashboardPage() {
     });
   }, [products, retailer, activeFilters]);
 
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...visible].sort((a, b) => {
+      if (sortKey === 'name') return a.title.localeCompare(b.title) * dir;
+      if (sortKey === 'price') return ((a.price ?? 0) - (b.price ?? 0)) * dir;
+      return (new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime()) * dir;
+    });
+  }, [visible, sortKey, sortDir]);
+
   if (!ready || !user) return null;
 
   const firstName = user.name.trim().split(/\s+/)[0] || 'there';
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'date' ? 'desc' : 'asc');
+    }
+  }
 
   function toggleFilter(key: string) {
     setActiveFilters((current) => {
@@ -130,7 +157,34 @@ export default function DashboardPage() {
           />
         </div>
 
-        {visible.length === 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm text-ink/45">Sort by:</span>
+          {(['date', 'name', 'price'] as const).map((key) => {
+            const active = sortKey === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => handleSort(key)}
+                className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-sm capitalize transition-colors ${
+                  active
+                    ? 'border-brand bg-brand/10 font-medium text-brand'
+                    : 'border-ink/10 bg-white text-ink/70 hover:border-ink/20'
+                }`}
+              >
+                {key}
+                {active ? <span>{sortDir === 'asc' ? '↑' : '↓'}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/15 border-t-brand" />
+            <p className="text-sm text-ink/45">Loading your products…</p>
+          </div>
+        ) : sorted.length === 0 ? (
           <div className="mt-10">
             <EmptyState
               title={products.length === 0 ? 'No products yet' : 'No matches'}
@@ -143,10 +197,11 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {visible.map((p) => (
+            {sorted.map((p, i) => (
               <ProductCard
                 key={p.id}
                 product={p}
+                index={i}
                 onDeleted={() => setProducts((current) => current.filter((x) => x.id !== p.id))}
               />
             ))}

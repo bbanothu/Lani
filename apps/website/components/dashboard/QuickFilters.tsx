@@ -16,14 +16,15 @@ export default function QuickFilters({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="mr-1 text-sm text-ink/45">Quick filters:</span>
-      {chips.map((chip) => {
+      {chips.map((chip, i) => {
         const selected = active.has(chip.key);
         return (
           <button
             key={chip.key}
             type="button"
             onClick={() => onToggle(chip.key)}
-            className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+            style={{ animationDelay: `${Math.min(i, 20) * 40}ms` }}
+            className={`animate-fade-in rounded-full border px-3 py-1.5 text-sm transition-colors ${
               selected
                 ? 'border-brand bg-brand/10 font-medium text-brand'
                 : 'border-ink/10 bg-white text-ink/70 hover:border-ink/20'

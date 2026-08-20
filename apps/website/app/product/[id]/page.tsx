@@ -88,10 +88,14 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
   const [tracking, setTracking] = useState(false);
   const [history, setHistory] = useState<PricePoint[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ready) return;
-    getProduct(params.id).then(setProduct);
+    getProduct(params.id).then((p) => {
+      setProduct(p);
+      setLoading(false);
+    });
   }, [ready, params.id]);
 
   useEffect(() => {
@@ -131,6 +135,19 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
   }
 
   if (!ready || !user) return null;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cream pb-28">
+        <main className="mx-auto max-w-2xl px-4 pb-8 pt-8 text-center sm:px-6">
+          <div className="flex flex-col items-center justify-center gap-3 py-24">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/15 border-t-brand" />
+            <p className="text-sm text-ink/45">Loading product…</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (!product) {
     return (
@@ -331,10 +348,11 @@ export default function ProductDetailPage({ params }: { params: { id: string } }
               <h1 className="mt-1 text-xl font-bold text-ink">{product.title}</h1>
               <p className="mt-1 text-2xl font-bold text-ink">{price}</p>
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {tags.map((tag) => (
+                {tags.map((tag, i) => (
                   <span
                     key={tag}
-                    className="rounded-full bg-ink/[0.05] px-2.5 py-1 text-xs font-medium text-ink/50"
+                    style={{ animationDelay: `${i * 40}ms` }}
+                    className="animate-fade-in rounded-full bg-ink/[0.05] px-2.5 py-1 text-xs font-medium text-ink/50"
                   >
                     {tag}
                   </span>

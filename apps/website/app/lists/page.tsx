@@ -56,12 +56,14 @@ function IconBtn({
 function ListCard({
   list,
   products,
+  index = 0,
   onEdit,
   onShare,
   onDelete,
 }: {
   list: ProductList;
   products: Product[];
+  index?: number;
   onEdit: () => void;
   onShare: () => void;
   onDelete: () => void;
@@ -74,7 +76,10 @@ function ListCard({
   const thumbs: (Product | null)[] = [0, 1, 2, 3].map((i) => filled[i] ?? null);
 
   return (
-    <article className="flex flex-col rounded-[28px] border border-ink/8 bg-white p-5 shadow-sm">
+    <article
+      style={{ animationDelay: `${Math.min(index, 20) * 40}ms` }}
+      className="animate-fade-in flex flex-col rounded-[28px] border border-ink/8 bg-white p-5 shadow-sm"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-bold text-ink">{list.title}</h2>
@@ -179,12 +184,16 @@ export default function ListsPage() {
   const { user, ready } = useRequireUser();
   const [lists, setLists] = useState<ProductList[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | ListVisibility>('all');
 
   useEffect(() => {
     if (!ready) return;
     const sync = () => {
-      getLists().then(setLists);
+      getLists().then((l) => {
+        setLists(l);
+        setLoading(false);
+      });
       getProducts().then(setProducts);
     };
     sync();
@@ -295,7 +304,12 @@ export default function ListsPage() {
           })}
         </div>
 
-        {visible.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/15 border-t-brand" />
+            <p className="text-sm text-ink/45">Loading your lists…</p>
+          </div>
+        ) : visible.length === 0 ? (
           <div className="mt-10 rounded-[28px] border border-ink/8 bg-white px-6 py-16 text-center shadow-sm">
             <p className="text-lg font-semibold text-ink">No lists yet</p>
             <p className="mt-2 text-sm text-ink/45">
@@ -311,11 +325,12 @@ export default function ListsPage() {
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {visible.map((list) => (
+            {visible.map((list, i) => (
               <ListCard
                 key={list.id}
                 list={list}
                 products={products}
+                index={i}
                 onEdit={() => handleEdit(list)}
                 onShare={() => handleShare(list)}
                 onDelete={() => handleDelete(list)}

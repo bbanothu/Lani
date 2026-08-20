@@ -1,6 +1,6 @@
 'use client';
 
-export default function FinalCTA() {
+export default function FinalCTA({ onShopWithLani }: { onShopWithLani?: () => void }) {
   return (
     <section className="bg-white pt-0 pb-24">
       <div className="container mx-auto px-4 sm:px-8 lg:px-20">
@@ -21,8 +21,9 @@ export default function FinalCTA() {
 
             {/* CTA Button */}
             <div className="pt-4">
-              <a
-                href="/home"
+              <button
+                type="button"
+                onClick={onShopWithLani}
                 className="inline-flex items-center px-8 py-3 bg-[#FAFAF9] text-[#F97316] text-sm font-medium rounded-lg hover:bg-white transition shadow-lg"
               >
                 Get started
@@ -34,7 +35,7 @@ export default function FinalCTA() {
                     d="M9 5l7 7-7 7"
                   />
                 </svg>
-              </a>
+              </button>
             </div>
           </div>
         </div>

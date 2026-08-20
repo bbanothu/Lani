@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getProducts, subscribeToProducts } from '@/lib/products';
 
-export default function NewHeader() {
+export default function NewHeader({ onShopWithLani }: { onShopWithLani?: () => void }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [productCount, setProductCount] = useState<number>(0);
   const [displayCount, setDisplayCount] = useState<number>(0);
@@ -88,18 +88,18 @@ export default function NewHeader() {
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
             {/* Products Saved Badge - Animated live counter */}
             {displayCount > 0 && (
-              <div className="flex items-center gap-3 px-6 py-3 rounded-lg border border-[#F97316] bg-gradient-to-br from-white to-[#FFF7ED] transition-all duration-300">
-                <span className="text-xl font-semibold text-[#0C0A09] tabular-nums">
-                  {displayCount.toLocaleString('en-US')}
-                </span>
-                <span className="text-base text-[#0C0A09]">Products Saved</span>
-                {/* Live indicator */}
+              <div className="flex items-center gap-3 px-2 py-1 rounded-lg border border-[#F97316] bg-gradient-to-br from-white to-[#FFF7ED] transition-all duration-300">
                 <div className="relative flex items-center">
                   <span className="flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F97316] opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF6900]"></span>
                   </span>
                 </div>
+                <span className="text-xl font-semibold text-[#0C0A09] tabular-nums">
+                  {displayCount.toLocaleString('en-US')}
+                </span>
+                <span className="text-base text-[#0C0A09]">Products Saved</span>
+                {/* Live indicator */}
               </div>
             )}
 
@@ -116,12 +116,13 @@ export default function NewHeader() {
             >
               How it works
             </button>
-            <a
-              href="/home"
+            <button
+              type="button"
+              onClick={onShopWithLani}
               className="px-9 py-2 bg-[#FF6900] text-white text-base rounded-lg hover:bg-[#F97316] transition"
             >
               Shop with Lani
-            </a>
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -186,12 +187,16 @@ export default function NewHeader() {
               >
                 How it works
               </button>
-              <a
-                href="/home"
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onShopWithLani?.();
+                }}
                 className="w-full px-6 py-3 bg-[#FF6900] text-white rounded-lg hover:bg-[#F97316] transition inline-block text-center"
               >
                 Shop with Lani
-              </a>
+              </button>
             </nav>
           </div>
         )}

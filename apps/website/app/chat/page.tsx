@@ -170,12 +170,13 @@ function ChatProductRail({ products }: { products: Product[] }) {
 
   return (
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {products.map((product) => {
+      {products.map((product, i) => {
         const price = product.price != null ? `$${Number(product.price).toLocaleString()}` : '—';
         return (
           <div
             key={product.id}
-            className="relative w-[148px] shrink-0 overflow-hidden rounded-2xl border border-ink/10 bg-white shadow-sm"
+            style={{ animationDelay: `${Math.min(i, 20) * 40}ms` }}
+            className="animate-fade-in relative w-[148px] shrink-0 overflow-hidden rounded-2xl border border-ink/10 bg-white shadow-sm"
           >
             <a href={product.url} target="_blank" rel="noopener noreferrer" className="block">
               <div className="aspect-square bg-ink/[0.03]">
@@ -451,7 +452,7 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-[#F3F3F1]">
+        <div className="animate-fade-in flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/50 bg-white/40 shadow-[0_8px_32px_rgba(28,27,26,0.08)] backdrop-blur-xl">
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-6 sm:px-6">
             {messages.map((message) => {
               if (message.role === 'user') {
@@ -476,7 +477,7 @@ export default function ChatPage() {
                     </span>
                     <span className="text-sm font-semibold text-ink">Lani</span>
                   </div>
-                  <div className="rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-[15px] leading-relaxed text-ink shadow-sm whitespace-pre-wrap">
+                  <div className="self-start rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-[15px] leading-relaxed text-ink shadow-sm whitespace-pre-wrap">
                     {message.content || <span className="text-ink/45">Thinking…</span>}
                   </div>
                   <ChatProductRail products={cards} />
@@ -492,7 +493,7 @@ export default function ChatPage() {
             <div ref={bottomRef} />
           </div>
 
-          <form onSubmit={onSubmit} className="border-t border-ink/5 px-4 py-4 sm:px-6">
+          <form onSubmit={onSubmit} className="border-t border-white/40 px-4 py-4 sm:px-6">
             <div className="flex items-center gap-2 rounded-full border border-ink/10 bg-white py-1.5 pl-5 pr-1.5 shadow-sm">
               <input
                 value={input}
@@ -564,8 +565,8 @@ export default function ChatPage() {
       />
 
       {historyOpen ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-sm rounded-[24px] bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6 backdrop-blur-sm">
+          <div className="animate-fade-in w-full max-w-sm rounded-[24px] border border-white/50 bg-white/70 p-6 shadow-xl backdrop-blur-2xl">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-lg font-bold text-ink">Previous chats</p>
               <button
@@ -583,12 +584,13 @@ export default function ChatPage() {
               <p className="py-6 text-center text-sm text-ink/45">No previous chats yet.</p>
             ) : (
               <div className="max-h-80 overflow-y-auto">
-                {sessions.map((session) => (
+                {sessions.map((session, i) => (
                   <button
                     key={session.id}
                     type="button"
                     onClick={() => loadSession(session)}
-                    className="flex w-full items-center justify-between gap-3 border-b border-ink/5 py-3 text-left last:border-b-0"
+                    style={{ animationDelay: `${Math.min(i, 20) * 30}ms` }}
+                    className="animate-fade-in flex w-full items-center justify-between gap-3 border-b border-ink/5 py-3 text-left last:border-b-0"
                   >
                     <span className="truncate text-sm font-semibold text-ink">{session.title}</span>
                     <span className="shrink-0 text-xs text-ink/40">

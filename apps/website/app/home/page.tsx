@@ -1,4 +1,20 @@
+'use client';
+
+import { useState } from 'react';
 import Image from 'next/image';
+import NewHeader from '@/components/figma-landing/NewHeader';
+import NewHero from '@/components/figma-landing/NewHero';
+import FeaturesGrid from '@/components/figma-landing/FeaturesGrid';
+import VideoSection from '@/components/figma-landing/VideoSection';
+import CrossPlatformSection from '@/components/figma-landing/CrossPlatformSection';
+import TestimonialsSection from '@/components/figma-landing/TestimonialsSection';
+import TestimonialWithBrowsers from '@/components/figma-landing/TestimonialWithBrowsers';
+import BentoGrid from '@/components/figma-landing/BentoGrid';
+import HowItWorks from '@/components/figma-landing/HowItWorks';
+import ProblemSolutionSection from '@/components/figma-landing/ProblemSolutionSection';
+import TestimonialsCarousel from '@/components/figma-landing/TestimonialsCarousel';
+import FinalCTA from '@/components/figma-landing/FinalCTA';
+import NewFooter from '@/components/figma-landing/NewFooter';
 
 const FEATURES = [
   {
@@ -59,12 +75,12 @@ const FEATURES = [
   },
 ];
 
-export default function HomeOnboardingPage() {
+function StartBrowsing() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cream px-6 py-12">
-      <div className="max-w-[960px] w-full">
-        <div className="flex justify-center mb-8">
-          <div className="relative w-32 h-32">
+    <div className="animate-fade-in flex min-h-screen items-center justify-center bg-cream px-6 py-12">
+      <div className="w-full max-w-[960px]">
+        <div className="mb-8 flex justify-center">
+          <div className="relative h-32 w-32">
             <Image
               src="/lani-logo.png"
               alt="Lani Logo"
@@ -75,26 +91,26 @@ export default function HomeOnboardingPage() {
           </div>
         </div>
 
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-[#0a0a0a] mb-3">Meet Lani</h1>
-          <h2 className="text-xl font-semibold text-[#f97316] mb-2">
+        <div className="mb-12 text-center">
+          <h1 className="mb-3 text-4xl font-bold text-[#0a0a0a]">Meet Lani</h1>
+          <h2 className="mb-2 text-xl font-semibold text-[#f97316]">
             Your Personal Shopping Retriever
           </h2>
-          <p className="text-base text-[#64748b] font-medium">
+          <p className="text-base font-medium text-[#64748b]">
             Loyal to your taste, never forgets.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <div className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-3">
           {FEATURES.map((feature) => (
-            <div key={feature.title} className="bg-white rounded-xl p-6 shadow-sm">
+            <div key={feature.title} className="rounded-xl bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-[#fff7ed] rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#fff7ed]">
                   {feature.icon}
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-base font-medium text-[#0a0a0a] mb-2">{feature.title}</h3>
-                  <p className="text-base text-[#737373] leading-relaxed">{feature.description}</p>
+                  <h3 className="mb-2 text-base font-medium text-[#0a0a0a]">{feature.title}</h3>
+                  <p className="text-base leading-relaxed text-[#737373]">{feature.description}</p>
                 </div>
               </div>
             </div>
@@ -104,7 +120,7 @@ export default function HomeOnboardingPage() {
         <div className="flex justify-center">
           <a
             href="/dashboard"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-[#f97316] text-white text-base font-medium rounded-lg hover:bg-[#ea580c] transition-colors duration-200 shadow-sm"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#f97316] px-8 py-4 text-base font-medium text-white shadow-sm transition-colors duration-200 hover:bg-[#ea580c]"
           >
             Start Browsing
             <svg
@@ -126,6 +142,32 @@ export default function HomeOnboardingPage() {
           </a>
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const [view, setView] = useState<'landing' | 'start'>('landing');
+
+  if (view === 'start') return <StartBrowsing />;
+
+  const showStart = () => setView('start');
+
+  return (
+    <div className="animate-fade-in min-h-screen bg-white">
+      <NewHeader onShopWithLani={showStart} />
+      <NewHero />
+      <FeaturesGrid />
+      <VideoSection />
+      <CrossPlatformSection />
+      <TestimonialsSection />
+      <TestimonialWithBrowsers />
+      <BentoGrid />
+      <HowItWorks />
+      <ProblemSolutionSection />
+      <TestimonialsCarousel />
+      <FinalCTA onShopWithLani={showStart} />
+      <NewFooter />
     </div>
   );
 }

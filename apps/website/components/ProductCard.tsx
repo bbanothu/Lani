@@ -58,9 +58,11 @@ function IconButton({
 
 export default function ProductCard({
   product,
+  index = 0,
   onDeleted,
 }: {
   product: Product;
+  index?: number;
   onDeleted?: () => void;
 }) {
   const tags = hintTags(product);
@@ -105,9 +107,10 @@ export default function ProductCard({
 
   return (
     <article
-      className={`flex flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-[0_1px_3px_rgba(28,27,26,0.04)] transition-all duration-200 hover:shadow-[0_8px_24px_rgba(28,27,26,0.08)] ${
+      className={`animate-fade-in flex flex-col overflow-hidden rounded-2xl border border-ink/8 bg-white shadow-[0_1px_3px_rgba(28,27,26,0.04)] transition-all duration-200 hover:shadow-[0_8px_24px_rgba(28,27,26,0.08)] ${
         deleting ? 'scale-90 opacity-0' : 'scale-100 opacity-100'
       }`}
+      style={{ animationDelay: `${Math.min(index, 20) * 40}ms` }}
     >
       <div className="flex items-center justify-between px-3.5 pt-3 text-[11px] text-ink/40">
         <span className="truncate font-medium lowercase">{retailerLabel(product.domain)}</span>
