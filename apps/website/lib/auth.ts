@@ -9,6 +9,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  avatarUrl: string | null;
 }
 
 function toAuthUser(user: User): AuthUser {
@@ -16,6 +17,7 @@ function toAuthUser(user: User): AuthUser {
     id: user.id,
     email: user.email ?? '',
     name: (user.user_metadata?.name as string | undefined) || user.email || 'there',
+    avatarUrl: (user.user_metadata?.avatar_url as string | undefined) || null,
   };
 }
 
@@ -60,6 +62,11 @@ export async function deleteAccount(): Promise<string | null> {
 
 export async function updateName(name: string): Promise<string | null> {
   const { error } = await supabase.auth.updateUser({ data: { name } });
+  return error?.message ?? null;
+}
+
+export async function updateAvatarUrl(avatarUrl: string): Promise<string | null> {
+  const { error } = await supabase.auth.updateUser({ data: { avatar_url: avatarUrl } });
   return error?.message ?? null;
 }
 

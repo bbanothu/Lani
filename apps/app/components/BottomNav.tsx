@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tab } from '../lib/nav';
 import { colors } from '../lib/theme';
 
@@ -17,8 +18,9 @@ export default function BottomNav({
   active?: Tab;
   onSelect?: (tab: Tab) => void;
 }) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
       <View style={styles.bar}>
         {TABS.map((tab) => {
           const isActive = tab.id === active;
@@ -46,7 +48,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 20,
     alignItems: 'center',
   },
   bar: {

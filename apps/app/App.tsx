@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useSession } from './lib/auth';
 import type { Tab } from './lib/nav';
 import { colors } from './lib/theme';
+import FadeIn from './components/FadeIn';
+import BottomNav from './components/BottomNav';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import CartScreen from './screens/CartScreen';
@@ -28,23 +30,32 @@ export default function App() {
   }
 
   let screen = null;
+  let key = 'login';
   if (!user) {
     screen = <LoginScreen />;
   } else if (tab === 'chat') {
-    screen = <ChatScreen onNavigate={setTab} />;
+    screen = <ChatScreen />;
+    key = 'chat';
   } else if (tab === 'cart') {
-    screen = <CartScreen onNavigate={setTab} />;
+    screen = <CartScreen />;
+    key = 'cart';
   } else if (tab === 'lists') {
-    screen = <ListsScreen onNavigate={setTab} />;
+    screen = <ListsScreen />;
+    key = 'lists';
   } else if (tab === 'profile') {
-    screen = <ProfileScreen user={user} onNavigate={setTab} onSignedOut={() => setTab('home')} />;
+    screen = <ProfileScreen user={user} onSignedOut={() => setTab('home')} />;
+    key = 'profile';
   } else {
     screen = <DashboardScreen user={user} onNavigate={setTab} />;
+    key = 'home';
   }
 
   return (
     <SafeAreaProvider>
-      {screen}
+      <FadeIn key={key} style={{ flex: 1 }}>
+        {screen}
+      </FadeIn>
+      {user ? <BottomNav active={tab} onSelect={setTab} /> : null}
       <StatusBar style="dark" />
     </SafeAreaProvider>
   );

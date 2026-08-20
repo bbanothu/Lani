@@ -14,8 +14,9 @@ import {
   View,
 } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomNav from '../components/BottomNav';
+import FadeIn from '../components/FadeIn';
 import { addToCart, isInCart, removeFromCart, subscribeToCart } from '../lib/cart';
 import { streamChat } from '../lib/chat';
 import {
@@ -28,7 +29,6 @@ import {
 } from '../lib/chat-history';
 import { getLLMSettings, type ChatMessage } from '../lib/llm';
 import { addProductToList, getLists, removeProductFromList, type ProductList } from '../lib/lists';
-import type { Tab } from '../lib/nav';
 import { getProducts, type Product } from '../lib/products';
 import { colors } from '../lib/theme';
 
@@ -212,7 +212,11 @@ function ProductRail({ products }: { products: Product[] }) {
       data={products}
       keyExtractor={(p) => p.id}
       contentContainerStyle={{ gap: 10 }}
-      renderItem={({ item }) => <RailCard product={item} />}
+      renderItem={({ item, index }) => (
+        <FadeIn delay={Math.min(index, 20) * 40}>
+          <RailCard product={item} />
+        </FadeIn>
+      )}
     />
   );
 }
@@ -263,7 +267,7 @@ const WELCOME_MESSAGE: UiMessage = {
   content: "Hi — I'm Lani. Ask me about products you've saved, deals, or what to buy next.",
 };
 
-export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+export default function ChatScreen() {
   const [messages, setMessages] = useState<UiMessage[]>([WELCOME_MESSAGE]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -395,81 +399,88 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
           </View>
         </View>
 
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            if (item.role === 'user') {
-              return (
-                <View style={styles.userRow}>
-                  <View style={styles.userBubble}>
-                    <Text style={styles.userText}>{item.content}</Text>
-                  </View>
-                </View>
-              );
-            }
-            const cards = (item.productIds || [])
-              .map((id) => catalog.get(id))
-              .filter((p): p is Product => Boolean(p));
-            return (
-              <View style={styles.assistantBlock}>
-                <View style={styles.assistantHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>L</Text>
-                  </View>
-                  <Text style={styles.assistantName}>Lani</Text>
-                </View>
-                <View style={styles.assistantBubble}>
-                  {item.content ? (
-                    <Text style={styles.assistantText}>{item.content}</Text>
-                  ) : (
-                    <View style={styles.thinkingRow}>
-                      <ActivityIndicator size="small" color={colors.ink40} />
-                      <Text style={styles.thinkingText}>Thinking…</Text>
+        <FadeIn style={styles.panelWrap}>
+          <BlurView intensity={40} tint="light" style={styles.panel}>
+            <FlatList
+              ref={listRef}
+              style={{ flex: 1 }}
+              data={messages}
+              keyExtractor={(m) => m.id}
+              contentContainerStyle={styles.list}
+              renderItem={({ item }) => {
+                if (item.role === 'user') {
+                  return (
+                    <View style={styles.userRow}>
+                      <View style={styles.userBubble}>
+                        <Text style={styles.userText}>{item.content}</Text>
+                      </View>
                     </View>
-                  )}
-                </View>
-                <ProductRail products={cards} />
-              </View>
-            );
-          }}
-          ListFooterComponent={error ? <Text style={styles.errorText}>{error}</Text> : null}
-        />
+                  );
+                }
+                const cards = (item.productIds || [])
+                  .map((id) => catalog.get(id))
+                  .filter((p): p is Product => Boolean(p));
+                return (
+                  <View style={styles.assistantBlock}>
+                    <View style={styles.assistantHeader}>
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>L</Text>
+                      </View>
+                      <Text style={styles.assistantName}>Lani</Text>
+                    </View>
+                    <View style={styles.assistantBubble}>
+                      {item.content ? (
+                        <Text style={styles.assistantText}>{item.content}</Text>
+                      ) : (
+                        <View style={styles.thinkingRow}>
+                          <ActivityIndicator size="small" color={colors.ink40} />
+                          <Text style={styles.thinkingText}>Thinking…</Text>
+                        </View>
+                      )}
+                    </View>
+                    <ProductRail products={cards} />
+                  </View>
+                );
+              }}
+              ListFooterComponent={error ? <Text style={styles.errorText}>{error}</Text> : null}
+            />
 
-        <View style={styles.inputBar}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder={listening ? 'Listening…' : 'Type a message...'}
-            placeholderTextColor={colors.ink40}
-            style={styles.input}
-            editable={!sending}
-            onSubmitEditing={send}
-          />
-          <Pressable
-            onPress={toggleListening}
-            disabled={sending}
-            style={[styles.micBtn, listening && styles.micBtnActive]}
-          >
-            <Text style={[styles.micBtnText, listening && styles.micBtnTextActive]}>
-              {listening ? '◼︎' : '🎤'}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={send}
-            disabled={sending || !input.trim()}
-            style={[styles.sendBtn, (sending || !input.trim()) && styles.sendBtnDisabled]}
-          >
-            <Text style={styles.sendBtnText}>↑</Text>
-          </Pressable>
-        </View>
+            <View style={styles.inputBar}>
+              <View style={styles.inputPill}>
+                <TextInput
+                  value={input}
+                  onChangeText={setInput}
+                  placeholder={listening ? 'Listening…' : 'Type a message...'}
+                  placeholderTextColor={colors.ink40}
+                  style={styles.input}
+                  editable={!sending}
+                  onSubmitEditing={send}
+                />
+                <Pressable
+                  onPress={toggleListening}
+                  disabled={sending}
+                  style={[styles.micBtn, listening && styles.micBtnActive]}
+                >
+                  <Text style={[styles.micBtnText, listening && styles.micBtnTextActive]}>
+                    {listening ? '◼︎' : '🎤'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={send}
+                  disabled={sending || !input.trim()}
+                  style={[styles.sendBtn, (sending || !input.trim()) && styles.sendBtnDisabled]}
+                >
+                  <Text style={styles.sendBtnText}>↑</Text>
+                </Pressable>
+              </View>
+            </View>
+          </BlurView>
+        </FadeIn>
       </KeyboardAvoidingView>
 
       <Modal visible={historyVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <BlurView intensity={50} tint="light" style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Previous chats</Text>
               <Pressable hitSlop={8} onPress={() => setHistoryVisible(false)}>
@@ -485,27 +496,36 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (tab: Tab) => v
                 data={sessions}
                 keyExtractor={(s) => s.id}
                 style={{ maxHeight: 360 }}
-                renderItem={({ item }) => (
-                  <Pressable style={styles.sessionRow} onPress={() => loadSession(item)}>
-                    <Text style={styles.sessionTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.sessionDate}>{relativeDay(item.updatedAt)}</Text>
-                  </Pressable>
+                renderItem={({ item, index }) => (
+                  <FadeIn delay={Math.min(index, 20) * 30}>
+                    <Pressable style={styles.sessionRow} onPress={() => loadSession(item)}>
+                      <Text style={styles.sessionTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.sessionDate}>{relativeDay(item.updatedAt)}</Text>
+                    </Pressable>
+                  </FadeIn>
                 )}
               />
             )}
-          </View>
+          </BlurView>
         </View>
       </Modal>
-
-      <BottomNav active="chat" onSelect={onNavigate} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream },
+  panelWrap: { flex: 1, marginHorizontal: 12 },
+  panel: {
+    flex: 1,
+    borderRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -538,9 +558,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 380,
     maxHeight: '70%',
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
     padding: 20,
+    overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -585,6 +608,7 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.white, fontSize: 11, fontWeight: '700' },
   assistantName: { fontSize: 13, fontWeight: '600', color: colors.ink },
   assistantBubble: {
+    alignSelf: 'flex-start',
     maxWidth: '92%',
     borderWidth: 1,
     borderColor: colors.ink10,
@@ -604,43 +628,47 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     paddingHorizontal: 16,
     paddingBottom: 100,
     paddingTop: 8,
   },
-  input: {
-    flex: 1,
+  inputPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     borderWidth: 1,
     borderColor: colors.ink10,
     backgroundColor: colors.white,
     borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingLeft: 18,
+    paddingRight: 6,
+    paddingVertical: 6,
+  },
+  input: {
+    flex: 1,
     fontSize: 15,
     color: colors.ink,
+    paddingVertical: 6,
   },
   sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnDisabled: { opacity: 0.5 },
-  sendBtnText: { color: colors.white, fontSize: 18, fontWeight: '700' },
+  sendBtnText: { color: colors.white, fontSize: 16, fontWeight: '700' },
   micBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
   },
   micBtnActive: { backgroundColor: '#be123c' },
-  micBtnText: { fontSize: 18 },
+  micBtnText: { fontSize: 15 },
   micBtnTextActive: { color: colors.white },
 });

@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../lib/theme';
+import FadeIn from './FadeIn';
 
 export type FilterChip = { key: string; label: string; count: number };
 
@@ -16,19 +17,20 @@ export default function QuickFilters({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Quick filters:</Text>
-      {chips.map((chip) => {
+      {chips.map((chip, i) => {
         const selected = active.has(chip.key);
         return (
-          <Pressable
-            key={chip.key}
-            onPress={() => onToggle(chip.key)}
-            style={[styles.chip, selected && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, selected && styles.chipTextActive]}>
-              {selected ? '✓' : '+'} {chip.label}{' '}
-              <Text style={styles.chipCount}>({chip.count})</Text>
-            </Text>
-          </Pressable>
+          <FadeIn key={chip.key} delay={Math.min(i, 20) * 40}>
+            <Pressable
+              onPress={() => onToggle(chip.key)}
+              style={[styles.chip, selected && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, selected && styles.chipTextActive]}>
+                {selected ? '✓' : '+'} {chip.label}{' '}
+                <Text style={styles.chipCount}>({chip.count})</Text>
+              </Text>
+            </Pressable>
+          </FadeIn>
         );
       })}
     </View>

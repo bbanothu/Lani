@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRequireUser, signOut, updateName, deleteAccount } from '@/lib/auth';
+import { uploadAvatar } from '@/lib/avatar';
 import { Product, getProducts, subscribeToProducts } from '@/lib/products';
 import { getLists, subscribeToLists } from '@/lib/lists';
 import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '@/lib/llm';
@@ -68,6 +69,9 @@ export default function ProfilePage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [tab, setTab] = useState<'general' | 'integrations'>('general');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('tab') === 'integrations') {
@@ -109,6 +113,21 @@ export default function ProfilePage() {
     await updateName(trimmedName);
     setName(trimmedName);
     setEditing(false);
+  }
+
+  async function handleAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+    setAvatarError(null);
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(user.id, file);
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Failed to update photo');
+    } finally {
+      setAvatarUploading(false);
+    }
   }
 
   async function handleSignOut() {
@@ -161,9 +180,36 @@ export default function ProfilePage() {
           <>
             <section className="rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xl font-bold text-brand">
-                  {initials(user.name)}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-brand/10 text-xl font-bold text-brand"
+                >
+                  {user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">
+                      {initials(user.name)}
+                    </span>
+                  )}
+                  {avatarUploading ? (
+                    <span className="absolute inset-0 flex items-center justify-center bg-ink/35">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    </span>
+                  ) : null}
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-brand text-xs font-bold text-white">
+                    +
+                  </span>
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
                 {editing ? (
                   <div className="flex-1 space-y-2">
                     <input
@@ -189,6 +235,7 @@ export default function ProfilePage() {
                   {editing ? 'Save' : 'Edit'}
                 </button>
               </div>
+              {avatarError ? <p className="mt-3 text-sm text-red-600">{avatarError}</p> : null}
             </section>
 
             <section className="mt-4 grid grid-cols-3 gap-4">

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import BottomNav from '../components/BottomNav';
+import FadeIn from '../components/FadeIn';
 import ProductCard from '../components/ProductCard';
 import QuickFilters, { type FilterChip } from '../components/QuickFilters';
 import type { AuthUser } from '../lib/auth';
@@ -50,10 +58,14 @@ export default function DashboardScreen({
   onNavigate: (tab: Tab) => void;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    getProducts().then(setProducts);
+    getProducts().then((p) => {
+      setProducts(p);
+      setLoading(false);
+    });
     return subscribeToProducts(() => getProducts().then(setProducts));
   }, []);
 
@@ -80,56 +92,69 @@ export default function DashboardScreen({
 
   return (
     <SafeAreaView style={styles.screen}>
-      <FlatList
-        data={visible}
-        keyExtractor={(p) => p.id}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <View>
-            <View style={styles.brandRow}>
-              <Image source={require('../assets/icon.png')} style={styles.brandIcon} />
-              <Text style={styles.brandName}>Lani</Text>
+      {loading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.brand} />
+          <Text style={styles.loadingText}>Loading your products…</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={visible}
+          keyExtractor={(p) => p.id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <View>
+              <View style={styles.headerRow}>
+                <Text style={styles.greeting}>Hey, {firstName}</Text>
+                <Pressable hitSlop={8} onPress={() => onNavigate('profile')}>
+                  <Image source={require('../assets/icon.png')} style={styles.brandIcon} />
+                </Pressable>
+              </View>
+              <View style={styles.filters}>
+                <QuickFilters chips={chips} active={activeFilters} onToggle={toggleFilter} />
+              </View>
             </View>
-            <Text style={styles.greeting}>Hey, {firstName}</Text>
-            <View style={styles.filters}>
-              <QuickFilters chips={chips} active={activeFilters} onToggle={toggleFilter} />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>
+                {products.length === 0 ? 'No products yet' : 'No matches'}
+              </Text>
+              <Text style={styles.emptyMessage}>
+                {products.length === 0
+                  ? 'Install the Lani extension and browse — product pages you visit show up here automatically.'
+                  : 'Try clearing a filter.'}
+              </Text>
             </View>
-          </View>
-        }
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>
-              {products.length === 0 ? 'No products yet' : 'No matches'}
-            </Text>
-            <Text style={styles.emptyMessage}>
-              {products.length === 0
-                ? 'Install the Lani extension and browse — product pages you visit show up here automatically.'
-                : 'Try clearing a filter.'}
-            </Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.cardWrap}>
-            <ProductCard product={item} />
-          </View>
-        )}
-      />
-      <BottomNav active="home" onSelect={onNavigate} />
+          }
+          renderItem={({ item, index }) => (
+            <FadeIn delay={Math.min(index, 20) * 40} style={styles.cardWrap}>
+              <ProductCard product={item} />
+            </FadeIn>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.cream },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  loadingText: { fontSize: 13, color: colors.ink45 },
   list: { padding: 16, paddingBottom: 120 },
   row: { gap: 12 },
   cardWrap: { flex: 1, marginBottom: 12 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   brandIcon: { width: 40, height: 40, borderRadius: 8 },
-  brandName: { fontSize: 22, fontWeight: '700', color: colors.ink },
-  greeting: { fontSize: 26, fontWeight: '700', color: colors.ink, marginBottom: 16 },
+  greeting: { fontSize: 26, fontWeight: '700', color: colors.ink },
   filters: { marginBottom: 20 },
   empty: { alignItems: 'center', paddingVertical: 80, paddingHorizontal: 24, gap: 8 },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: colors.ink },
