@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { signState, verifyState } from '@/lib/oauth-state';
 
 const ENV = process.env.EBAY_ENV === 'production' ? 'production' : 'sandbox';
 
@@ -9,30 +9,14 @@ export const EBAY_BASE = {
 
 export const EBAY_SCOPE = 'https://api.ebay.com/oauth/api_scope/sell.fulfillment';
 
-const STATE_TTL_MS = 10 * 60 * 1000;
-
-function sign(payload: string): string {
-  return createHmac('sha256', process.env.EBAY_CLIENT_SECRET!).update(payload).digest('base64url');
-}
-
 /** Carries the caller's verified user id through eBay's redirect, HMAC-signed so the callback can trust it. */
-export function signState(uid: string): string {
-  const payload = Buffer.from(JSON.stringify({ uid, exp: Date.now() + STATE_TTL_MS })).toString(
-    'base64url',
-  );
-  return `${payload}.${sign(payload)}`;
+export function signEbayState(uid: string): string {
+  return signState(process.env.EBAY_CLIENT_SECRET!, { uid });
 }
 
-export function verifyState(state: string): string | null {
-  const [payload, sig] = state.split('.');
-  if (!payload || !sig) return null;
-  const expected = sign(payload);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-  const { uid, exp } = JSON.parse(Buffer.from(payload, 'base64url').toString());
-  if (typeof uid !== 'string' || typeof exp !== 'number' || Date.now() > exp) return null;
-  return uid;
+export function verifyEbayState(state: string): string | null {
+  const data = verifyState<{ uid: string }>(process.env.EBAY_CLIENT_SECRET!, state);
+  return data?.uid ?? null;
 }
 
 async function tokenRequest(body: URLSearchParams) {

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { addToCart, isInCart, removeFromCart } from '@/lib/cart';
+import { blacklistDomain } from '@/lib/blacklist';
 import { isProductFavorited, toggleFavorite } from '@/lib/lists';
 import { popups } from '@/lib/popups';
 import { Product, removeProduct, trackProduct, untrackProduct } from '@/lib/products';
@@ -99,9 +100,14 @@ export default function ProductCard({
     action.catch(() => setTracking(wasTracking));
   }
 
-  function handleDelete() {
+  async function handleDelete() {
+    const choice = await popups.deleteChoice({
+      message: `Delete "${product.title}"? You can also flag ${retailerLabel(product.domain)} so it's blocked from future captures.`,
+    });
+    if (!choice) return;
     setDeleting(true);
-    removeProduct(product.id).catch(() => setDeleting(false));
+    const cleanup = choice === 'flag' ? blacklistDomain(product.domain) : Promise.resolve();
+    Promise.all([removeProduct(product.id), cleanup]).catch(() => setDeleting(false));
     setTimeout(() => onDeleted?.(), 220);
   }
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getUserFromAuthHeader } from '@/lib/supabase-server';
-import { EBAY_BASE, EBAY_SCOPE, signState } from '@/lib/ebay-server';
+import { EBAY_BASE, EBAY_SCOPE, signEbayState } from '@/lib/ebay-server';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     client_id: clientId,
     redirect_uri: ruName,
     response_type: 'code',
-    state: signState(user.id),
+    state: signEbayState(user.id),
     scope: EBAY_SCOPE,
   });
 

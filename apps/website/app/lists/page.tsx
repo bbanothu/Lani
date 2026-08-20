@@ -9,6 +9,7 @@ import {
   createList,
   deleteList,
   getLists,
+  getSharedWithMe,
   isFavoritesList,
   subscribeToLists,
   updateList,
@@ -18,11 +19,12 @@ import {
 import { popups } from '@/lib/popups';
 import { getProducts, type Product } from '@/lib/products';
 
-const FILTERS: { id: 'all' | ListVisibility; label: string }[] = [
+const FILTERS: { id: 'all' | ListVisibility | 'shared-with-me'; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'private', label: 'Private' },
   { id: 'shared', label: 'Shared' },
   { id: 'public', label: 'Public' },
+  { id: 'shared-with-me', label: 'Shared with me' },
 ];
 
 const VISIBILITY_STYLE: Record<ListVisibility, string> = {
@@ -57,6 +59,7 @@ function ListCard({
   list,
   products,
   index = 0,
+  readOnly = false,
   onEdit,
   onShare,
   onDelete,
@@ -64,9 +67,10 @@ function ListCard({
   list: ProductList;
   products: Product[];
   index?: number;
-  onEdit: () => void;
-  onShare: () => void;
-  onDelete: () => void;
+  readOnly?: boolean;
+  onEdit?: () => void;
+  onShare?: () => void;
+  onDelete?: () => void;
 }) {
   const pinned = isFavoritesList(list);
   const filled = list.productIds
@@ -87,39 +91,9 @@ function ListCard({
             {list.description || 'No description'}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <IconBtn label="Edit" onClick={onEdit}>
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <path
-                d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </IconBtn>
-          <IconBtn label="Share" onClick={onShare}>
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <path
-                d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v14"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </IconBtn>
-          {!pinned && (
-            <IconBtn label="Delete" onClick={onDelete}>
+        {readOnly ? null : (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <IconBtn label="Edit" onClick={onEdit}>
               <svg
                 viewBox="0 0 24 24"
                 className="h-4 w-4"
@@ -128,14 +102,46 @@ function ListCard({
                 strokeWidth="1.8"
               >
                 <path
-                  d="M3 6h18M8 6V4h8v2M9 10v8M15 10v8M6 6l1 14h10l1-14"
+                  d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </svg>
             </IconBtn>
-          )}
-        </div>
+            <IconBtn label="Share" onClick={onShare}>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <path
+                  d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4-4 4M12 2v14"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </IconBtn>
+            {!pinned && (
+              <IconBtn label="Delete" onClick={onDelete}>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path
+                    d="M3 6h18M8 6V4h8v2M9 10v8M15 10v8M6 6l1 14h10l1-14"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </IconBtn>
+            )}
+          </div>
+        )}
       </div>
 
       <span
@@ -183,9 +189,10 @@ export default function ListsPage() {
   const router = useRouter();
   const { user, ready } = useRequireUser();
   const [lists, setLists] = useState<ProductList[]>([]);
+  const [sharedWithMe, setSharedWithMe] = useState<ProductList[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | ListVisibility>('all');
+  const [filter, setFilter] = useState<'all' | ListVisibility | 'shared-with-me'>('all');
 
   useEffect(() => {
     if (!ready) return;
@@ -194,16 +201,17 @@ export default function ListsPage() {
         setLists(l);
         setLoading(false);
       });
+      getSharedWithMe().then(setSharedWithMe);
       getProducts().then(setProducts);
     };
     sync();
     return subscribeToLists(sync);
   }, [ready]);
 
-  const visible = useMemo(
-    () => (filter === 'all' ? lists : lists.filter((l) => l.visibility === filter)),
-    [lists, filter],
-  );
+  const visible = useMemo(() => {
+    if (filter === 'shared-with-me') return sharedWithMe;
+    return filter === 'all' ? lists : lists.filter((l) => l.visibility === filter);
+  }, [lists, sharedWithMe, filter]);
 
   async function handleNewList() {
     const title = await popups.prompt({
@@ -239,17 +247,6 @@ export default function ListsPage() {
       title: title.trim() || list.title,
       description: description ?? list.description,
     });
-    setLists(await getLists());
-  }
-
-  async function handleShare(list: ProductList) {
-    const next: ListVisibility =
-      list.visibility === 'private'
-        ? 'shared'
-        : list.visibility === 'shared'
-          ? 'public'
-          : 'private';
-    await updateList(list.id, { visibility: next });
     setLists(await getLists());
   }
 
@@ -311,17 +308,23 @@ export default function ListsPage() {
           </div>
         ) : visible.length === 0 ? (
           <div className="mt-10 rounded-[28px] border border-ink/8 bg-white px-6 py-16 text-center shadow-sm">
-            <p className="text-lg font-semibold text-ink">No lists yet</p>
-            <p className="mt-2 text-sm text-ink/45">
-              Create a list, then tap the list icon on any product card to add it.
+            <p className="text-lg font-semibold text-ink">
+              {filter === 'shared-with-me' ? 'Nothing shared with you yet' : 'No lists yet'}
             </p>
-            <button
-              type="button"
-              onClick={handleNewList}
-              className="mt-6 rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white"
-            >
-              + New List
-            </button>
+            <p className="mt-2 text-sm text-ink/45">
+              {filter === 'shared-with-me'
+                ? "When someone shares a list with your email, it'll show up here."
+                : 'Create a list, then tap the list icon on any product card to add it.'}
+            </p>
+            {filter === 'shared-with-me' ? null : (
+              <button
+                type="button"
+                onClick={handleNewList}
+                className="mt-6 rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white"
+              >
+                + New List
+              </button>
+            )}
           </div>
         ) : (
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -331,8 +334,9 @@ export default function ListsPage() {
                 list={list}
                 products={products}
                 index={i}
+                readOnly={filter === 'shared-with-me'}
                 onEdit={() => handleEdit(list)}
-                onShare={() => handleShare(list)}
+                onShare={() => popups.share({ listId: list.id, listTitle: list.title })}
                 onDelete={() => handleDelete(list)}
               />
             ))}

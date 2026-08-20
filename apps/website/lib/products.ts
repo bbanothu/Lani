@@ -62,6 +62,14 @@ export async function getProduct(id: string): Promise<Product | null> {
   return data ? productFromRow(data) : null;
 }
 
+/** Used by the public shared-list page -- RLS allows this for products in a shared/public list even for other viewers. */
+export async function getProductsByIds(ids: string[]): Promise<Product[]> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase.from('products').select('*').in('id', ids);
+  if (error) throw error;
+  return (data ?? []).map(productFromRow);
+}
+
 export async function addProduct(input: Omit<Product, 'id' | 'addedAt'>): Promise<Product> {
   const { data, error } = await supabase
     .from('products')

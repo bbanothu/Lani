@@ -94,18 +94,6 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
     setList(await getList(list.id));
   }
 
-  async function handleShare() {
-    if (!list) return;
-    const next: ListVisibility =
-      list.visibility === 'private'
-        ? 'shared'
-        : list.visibility === 'shared'
-          ? 'public'
-          : 'private';
-    await updateList(list.id, { visibility: next });
-    setList(await getList(list.id));
-  }
-
   async function handleDelete() {
     if (!list) return;
     const ok = await popups.confirm({
@@ -215,7 +203,10 @@ export default function ListDetailPage({ params }: { params: { id: string } }) {
                 />
               </svg>
             </IconBtn>
-            <IconBtn label="Share" onClick={handleShare}>
+            <IconBtn
+              label="Share"
+              onClick={() => popups.share({ listId: list.id, listTitle: list.title })}
+            >
               <svg
                 viewBox="0 0 24 24"
                 className="h-4 w-4"

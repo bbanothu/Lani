@@ -1,12 +1,14 @@
 import { supabase } from '@/lib/supabase';
 
+export type Provider = 'ebay' | 'etsy' | 'reverb';
+
 export interface Integration {
-  provider: 'ebay';
+  provider: Provider;
   connectedAt: string;
 }
 
 type IntegrationRow = {
-  provider: 'ebay';
+  provider: Provider;
   connected_at: string;
 };
 
@@ -20,7 +22,7 @@ export async function getIntegrations(): Promise<Integration[]> {
   return (data ?? []).map(integrationFromRow);
 }
 
-export async function disconnectIntegration(provider: Integration['provider']): Promise<void> {
+export async function disconnectIntegration(provider: Provider): Promise<void> {
   const { error } = await supabase.from('integrations').delete().eq('provider', provider);
   if (error) throw error;
 }
@@ -36,7 +38,7 @@ export function subscribeToIntegrations(callback: () => void): () => void {
   };
 }
 
-export interface EbayOrder {
+export interface ProviderOrder {
   orderId: string;
   itemTitle: string;
   price: string | null;
@@ -55,12 +57,12 @@ async function authedFetch(path: string): Promise<any> {
   return json;
 }
 
-export async function connectEbay(): Promise<void> {
-  const { url } = await authedFetch('/api/integrations/ebay/start');
+export async function connectProvider(provider: Provider): Promise<void> {
+  const { url } = await authedFetch(`/api/integrations/${provider}/start`);
   window.location.href = url;
 }
 
-export async function getEbayOrders(): Promise<EbayOrder[]> {
-  const { orders } = await authedFetch('/api/integrations/ebay/orders');
+export async function getProviderOrders(provider: Provider): Promise<ProviderOrder[]> {
+  const { orders } = await authedFetch(`/api/integrations/${provider}/orders`);
   return orders;
 }

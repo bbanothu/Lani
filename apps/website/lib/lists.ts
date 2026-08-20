@@ -56,6 +56,19 @@ export async function getList(id: string): Promise<ProductList | null> {
   return data ? fromRow(data) : null;
 }
 
+/** Lists someone else shared with the signed-in user's email -- RLS on list_shares scopes this to their own invites. */
+export async function getSharedWithMe(): Promise<ProductList[]> {
+  const { data, error } = await supabase
+    .from('list_shares')
+    .select(`lists(${SELECT})`)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? [])
+    .map((row: any) => row.lists)
+    .filter(Boolean)
+    .map(fromRow);
+}
+
 export async function createList(input: {
   title: string;
   description?: string;

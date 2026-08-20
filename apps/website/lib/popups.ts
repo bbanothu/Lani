@@ -26,11 +26,25 @@ export type PopupListPickerOpts = {
   productId: string;
 };
 
+export type PopupDeleteChoiceOpts = {
+  title?: string;
+  message: string;
+};
+
+export type DeleteChoice = 'delete' | 'flag' | null;
+
+export type PopupShareOpts = {
+  listId: string;
+  listTitle: string;
+};
+
 type PopupRequest =
   | { kind: 'alert'; opts: PopupAlertOpts; resolve: () => void }
   | { kind: 'confirm'; opts: PopupConfirmOpts; resolve: (value: boolean) => void }
   | { kind: 'prompt'; opts: PopupPromptOpts; resolve: (value: string | null) => void }
-  | { kind: 'listPicker'; opts: PopupListPickerOpts; resolve: () => void };
+  | { kind: 'listPicker'; opts: PopupListPickerOpts; resolve: () => void }
+  | { kind: 'deleteChoice'; opts: PopupDeleteChoiceOpts; resolve: (value: DeleteChoice) => void }
+  | { kind: 'share'; opts: PopupShareOpts; resolve: () => void };
 
 type PopupHandler = (request: PopupRequest) => void;
 
@@ -70,5 +84,13 @@ export const popups = {
 
   listPicker(opts: PopupListPickerOpts): Promise<void> {
     return new Promise((resolve) => enqueue({ kind: 'listPicker', opts, resolve }));
+  },
+
+  deleteChoice(opts: PopupDeleteChoiceOpts): Promise<DeleteChoice> {
+    return new Promise((resolve) => enqueue({ kind: 'deleteChoice', opts, resolve }));
+  },
+
+  share(opts: PopupShareOpts): Promise<void> {
+    return new Promise((resolve) => enqueue({ kind: 'share', opts, resolve }));
   },
 };
