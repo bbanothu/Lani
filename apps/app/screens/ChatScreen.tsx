@@ -13,7 +13,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import FadeIn from '../components/FadeIn';
@@ -277,26 +276,7 @@ export default function ChatScreen() {
   const [historyVisible, setHistoryVisible] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [listening, setListening] = useState(false);
   const listRef = useRef<FlatList<UiMessage>>(null);
-
-  useSpeechRecognitionEvent('start', () => setListening(true));
-  useSpeechRecognitionEvent('end', () => setListening(false));
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript;
-    if (transcript) setInput(transcript);
-  });
-  useSpeechRecognitionEvent('error', () => setListening(false));
-
-  async function toggleListening() {
-    if (listening) {
-      ExpoSpeechRecognitionModule.stop();
-      return;
-    }
-    const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!perms.granted) return;
-    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true });
-  }
 
   useEffect(() => {
     getProducts().then((p) => setCatalog(new Map(p.map((x) => [x.id, x]))));
@@ -450,21 +430,12 @@ export default function ChatScreen() {
                 <TextInput
                   value={input}
                   onChangeText={setInput}
-                  placeholder={listening ? 'Listening…' : 'Type a message...'}
+                  placeholder="Type a message..."
                   placeholderTextColor={colors.ink40}
                   style={styles.input}
                   editable={!sending}
                   onSubmitEditing={send}
                 />
-                <Pressable
-                  onPress={toggleListening}
-                  disabled={sending}
-                  style={[styles.micBtn, listening && styles.micBtnActive]}
-                >
-                  <Text style={[styles.micBtnText, listening && styles.micBtnTextActive]}>
-                    {listening ? '◼︎' : '🎤'}
-                  </Text>
-                </Pressable>
                 <Pressable
                   onPress={send}
                   disabled={sending || !input.trim()}
@@ -660,15 +631,4 @@ const styles = StyleSheet.create({
   },
   sendBtnDisabled: { opacity: 0.5 },
   sendBtnText: { color: colors.white, fontSize: 16, fontWeight: '700' },
-  micBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: colors.brand,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  micBtnActive: { backgroundColor: '#be123c' },
-  micBtnText: { fontSize: 15 },
-  micBtnTextActive: { color: colors.white },
 });

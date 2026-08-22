@@ -28,7 +28,7 @@ export default function CrossPlatformSection() {
 
             {/* Chrome Icon */}
             <a
-              href="https://chromewebstore.google.com/detail/lani/ekcgdpkgpgohmogglfceiibfgpcppefh"
+              href="https://chromewebstore.google.com/detail/lani/fhnebgjcghgkbjddbhgbdefmiinpenoj"
               target="_blank"
               rel="noopener noreferrer"
               className="w-20 h-20 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform duration-200"

@@ -10,13 +10,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.brainrotslop.lani",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Lani uses your photo library so you can choose a profile picture."
       }
     },
     "android": {
+      "package": "com.brainrotslop.lani",
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -34,13 +36,6 @@
       }
     },
     "plugins": [
-      [
-        "expo-speech-recognition",
-        {
-          "microphonePermission": "Allow Lani to use the microphone for voice input.",
-          "speechRecognitionPermission": "Allow Lani to use speech recognition for voice input."
-        }
-      ],
       [
         "expo-image-picker",
         {
