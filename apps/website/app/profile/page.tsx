@@ -1,0 +1,431 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { useRequireUser, signOut, updateName, deleteAccount } from '@/lib/auth';
+import { uploadAvatar } from '@/lib/avatar';
+import { Product, getProducts, subscribeToProducts } from '@/lib/products';
+import { getLists, subscribeToLists } from '@/lib/lists';
+import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '@/lib/llm';
+import BottomNav from '@/components/dashboard/BottomNav';
+import IntegrationsTab from '@/components/IntegrationsTab';
+
+const PROVIDERS: { id: LLMProvider; label: string }[] = [
+  { id: 'ollama', label: 'Ollama' },
+  { id: 'claude', label: 'Claude' },
+  { id: 'openrouter', label: 'OpenRouter' },
+];
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
+
+function storeLabel(domain: string): string {
+  return domain.replace(/^www\./, '').replace(/\.(com|net|org|co|io).*$/i, '');
+}
+
+function faviconUrl(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function topStores(products: Product[]): { domain: string; count: number; pct: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of products) {
+    if (!p.domain) continue;
+    counts.set(p.domain, (counts.get(p.domain) ?? 0) + 1);
+  }
+  const total = products.length || 1;
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([domain, count]) => ({ domain, count, pct: Math.round((count / total) * 100) }));
+}
+
+function topTags(products: Product[]): { tag: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const p of products) {
+    for (const tag of p.tags || []) {
+      const key = tag.toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([tag, count]) => ({ tag, count }));
+}
+
+export default function ProfilePage() {
+  const router = useRouter();
+  const { user, ready } = useRequireUser();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState('');
+  const [favoritedCount, setFavoritedCount] = useState(0);
+  const [llm, setLlm] = useState<LLMSettings | null>(null);
+  const [llmSaved, setLlmSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'general' | 'integrations'>('general');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tab') === 'integrations') {
+      setTab('integrations');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    setName(user.name);
+    getProducts().then(setProducts);
+    const unsubscribe = subscribeToProducts(() => {
+      getProducts().then(setProducts);
+    });
+    return unsubscribe;
+  }, [ready, user]);
+
+  useEffect(() => {
+    setLlm(getLLMSettings());
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const sync = () =>
+      getLists().then((lists) =>
+        setFavoritedCount(lists.find((l) => l.isFavorites)?.productIds.length ?? 0),
+      );
+    sync();
+    return subscribeToLists(sync);
+  }, [ready]);
+
+  const stores = useMemo(() => topStores(products), [products]);
+  const tags = useMemo(() => topTags(products), [products]);
+
+  if (!ready || !user) return null;
+
+  async function handleSave() {
+    const trimmedName = name.trim() || user!.name;
+    await updateName(trimmedName);
+    setName(trimmedName);
+    setEditing(false);
+  }
+
+  async function handleAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !user) return;
+    setAvatarError(null);
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(user.id, file);
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : 'Failed to update photo');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    router.push('/login');
+  }
+
+  function handleSaveLlm() {
+    if (!llm) return;
+    saveLLMSettings(llm);
+    setLlmSaved(true);
+    setTimeout(() => setLlmSaved(false), 1500);
+  }
+
+  async function handleDeleteAccount() {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      setTimeout(() => setConfirmDelete(false), 4000);
+      return;
+    }
+    setDeleteError(null);
+    const error = await deleteAccount();
+    if (error) setDeleteError(error);
+    else router.push('/login');
+  }
+
+  return (
+    <div className="min-h-screen bg-cream pb-28">
+      <main className="mx-auto max-w-2xl px-4 pb-8 pt-8 sm:px-6">
+        <h1 className="mb-6 text-3xl font-bold tracking-tight text-ink sm:text-4xl">Settings</h1>
+
+        <div className="mb-6 flex gap-1 rounded-xl bg-ink/[0.05] p-1">
+          {(['general', 'integrations'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold capitalize transition-colors ${
+                tab === t ? 'bg-white text-ink shadow-sm' : 'text-ink/45 hover:text-ink/70'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'integrations' ? (
+          <IntegrationsTab />
+        ) : (
+          <>
+            <section className="rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full bg-brand/10 text-xl font-bold text-brand"
+                >
+                  {user.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">
+                      {initials(user.name)}
+                    </span>
+                  )}
+                  {avatarUploading ? (
+                    <span className="absolute inset-0 flex items-center justify-center bg-ink/35">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    </span>
+                  ) : null}
+                  <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-brand text-xs font-bold text-white">
+                    +
+                  </span>
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="hidden"
+                />
+                {editing ? (
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Name"
+                      className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                    <p className="px-1 text-sm text-ink/40">{user.email}</p>
+                  </div>
+                ) : (
+                  <div className="flex-1">
+                    <p className="text-lg font-semibold text-ink">{user.name}</p>
+                    <p className="text-sm text-ink/50">{user.email}</p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={editing ? handleSave : () => setEditing(true)}
+                  className="shrink-0 rounded-lg border border-ink/15 px-3.5 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/5"
+                >
+                  {editing ? 'Save' : 'Edit'}
+                </button>
+              </div>
+              {avatarError ? <p className="mt-3 text-sm text-red-600">{avatarError}</p> : null}
+            </section>
+
+            <section className="mt-4 grid grid-cols-3 gap-4">
+              {[
+                { label: 'Products', value: products.length },
+                { label: 'Saved', value: favoritedCount },
+                { label: 'Stores', value: stores.length },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-[20px] border border-ink/8 bg-white p-4 text-center shadow-sm"
+                >
+                  <p className="text-2xl font-bold tracking-tight text-ink">{stat.value}</p>
+                  <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/35">
+                    {stat.label}
+                  </p>
+                </div>
+              ))}
+            </section>
+
+            <section className="mt-4 rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
+              <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/35">TOP STORES</p>
+              {stores.length === 0 ? (
+                <p className="mt-3 text-sm text-ink/45">
+                  Install the Lani extension and browse — your most-visited stores show up here.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {stores.map((store, i) => (
+                    <div
+                      key={store.domain}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                      className="animate-fade-in flex items-center gap-3"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={faviconUrl(store.domain)}
+                        alt=""
+                        className="h-5 w-5 shrink-0 rounded-sm"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-ink">{storeLabel(store.domain)}</span>
+                          <span className="text-ink/40">{store.count}</span>
+                        </div>
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-ink/[0.06]">
+                          <div
+                            className="h-1.5 rounded-full bg-brand transition-all"
+                            style={{ width: `${store.pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-4 rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
+              <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/35">
+                STYLE SIGNALS
+              </p>
+              {tags.length === 0 ? (
+                <p className="mt-3 text-sm text-ink/45">
+                  Not enough data yet — tags show up here once the extension captures a few more
+                  products.
+                </p>
+              ) : (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {tags.map((t, i) => (
+                    <span
+                      key={t.tag}
+                      style={{ animationDelay: `${i * 40}ms` }}
+                      className="animate-fade-in rounded-full bg-ink/[0.05] px-2.5 py-1 text-xs font-medium text-ink/60"
+                    >
+                      {t.tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {llm ? (
+              <section className="mt-4 rounded-[28px] border border-ink/8 bg-white p-6 shadow-sm">
+                <p className="text-[11px] font-semibold tracking-[0.08em] text-ink/35">
+                  AI ASSISTANT
+                </p>
+
+                <div className="mt-3 flex gap-2">
+                  {PROVIDERS.map((p) => {
+                    const active = llm.provider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setLlm({ ...llm, provider: p.id })}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                          active
+                            ? 'border-brand bg-brand text-white'
+                            : 'border-ink/10 text-ink/60 hover:bg-ink/5'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className="mt-4 block text-xs font-semibold text-ink/45">Model</label>
+                <input
+                  type="text"
+                  value={llm.model}
+                  onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+                  placeholder="e.g. llama3.1"
+                  autoCapitalize="none"
+                  className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                />
+
+                {llm.provider === 'ollama' ? (
+                  <>
+                    <label className="mt-4 block text-xs font-semibold text-ink/45">
+                      Ollama base URL
+                    </label>
+                    <input
+                      type="text"
+                      value={llm.ollamaBaseUrl}
+                      onChange={(e) => setLlm({ ...llm, ollamaBaseUrl: e.target.value })}
+                      placeholder="http://127.0.0.1:11434/v1"
+                      autoCapitalize="none"
+                      className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="mt-4 block text-xs font-semibold text-ink/45">API key</label>
+                    <input
+                      type="password"
+                      value={llm.apiKey}
+                      onChange={(e) => setLlm({ ...llm, apiKey: e.target.value })}
+                      placeholder="sk-..."
+                      autoCapitalize="none"
+                      className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveLlm}
+                  className="mt-4 w-full rounded-lg bg-brand py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
+                >
+                  {llmSaved ? 'Saved ✓' : 'Save'}
+                </button>
+              </section>
+            ) : null}
+
+            <div className="mt-6 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-sm font-medium text-ink/45 transition-colors hover:text-red-500"
+              >
+                Sign out
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                className="text-sm font-medium text-red-600 transition-colors hover:text-red-700"
+              >
+                {confirmDelete ? 'Tap again to confirm' : 'Delete account'}
+              </button>
+            </div>
+            {deleteError ? (
+              <p className="mt-2 text-right text-sm text-red-600">{deleteError}</p>
+            ) : null}
+          </>
+        )}
+      </main>
+
+      <BottomNav
+        active="profile"
+        onSelect={(tab) => {
+          if (tab === 'profile') return;
+          if (tab === 'home') router.push('/dashboard');
+          if (tab === 'chat') router.push('/chat');
+          if (tab === 'cart') router.push('/cart');
+          if (tab === 'lists') router.push('/lists');
+        }}
+      />
+    </div>
+  );
+}

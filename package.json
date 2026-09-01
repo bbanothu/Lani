@@ -1,0 +1,19 @@
+{
+  "name": "savemoneyai-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/website",
+    "apps/extension"
+  ],
+  "scripts": {
+    "dev:website": "npm run dev --workspace=apps/website",
+    "build:website": "npm run build --workspace=apps/website",
+    "dev:extension": "npm run dev --workspace=apps/extension",
+    "build:extension": "npm run build --workspace=apps/extension",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}
