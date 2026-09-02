@@ -74,7 +74,6 @@ async function claudeCompletion(prompt: string, settings: LLMSettings): Promise<
       model: settings.model || 'claude-sonnet-5',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 300,
-      temperature: 0.3,
     }),
   });
 

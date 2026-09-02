@@ -35,11 +35,10 @@ export async function POST(req: Request) {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: settings.model || 'claude-sonnet-4-20250514',
+          model: settings.model || 'claude-sonnet-5',
           system: system || undefined,
           messages: rest.map((m) => ({ role: m.role, content: m.content })),
           max_tokens: 800,
-          temperature: 0.5,
           stream: true,
         }),
       });
