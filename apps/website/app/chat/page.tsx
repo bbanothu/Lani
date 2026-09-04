@@ -137,24 +137,36 @@ function parseAssistantReply(
     }
   }
 
-  // Last-resort fallback: the model is told to number items using the
-  // catalog's own item numbers when listing them (e.g. "1. **Title** ...").
-  // If it did that but forgot the required [[products:...]] line, and the
-  // title fallback above didn't catch a match (paraphrased/shortened titles
-  // in the reply), recover the cards from that numbering instead of showing
-  // none. Only kicks in when nothing else matched, and only for a sequence
-  // that starts at 1 and stays in order -- so it can't misfire on an
-  // unrelated numbered list (steps, tips, etc.) elsewhere in the reply.
-  if (ids.length === 0) {
-    let expected = 1;
-    for (const line of content.split('\n')) {
-      const match = line.match(/^\s*\**(\d{1,3})\**[.)]\s+\S/);
-      if (!match || Number(match[1]) !== expected) break;
-      const product = catalog[expected - 1];
-      if (!product) break;
-      ids.push(product.id);
-      expected++;
+  // Fallback: the model is told to number items using the catalog's own item
+  // numbers when listing them (e.g. "1. **Title** ..."). If it did that but
+  // forgot the required [[products:...]] line, recover the cards from that
+  // numbering. This runs independently of (not gated behind) the tag/title
+  // matches above -- a reply can have several paraphrased titles that don't
+  // match verbatim plus one that coincidentally does, which used to leave
+  // `ids` non-empty and skip this fallback, recovering only that one card
+  // instead of the full list. Only merges a sequence that starts at 1 and
+  // stays in order, so it can't misfire on an unrelated numbered list (steps,
+  // tips, etc.) elsewhere in the reply.
+  let expected = 1;
+  let started = false;
+  for (const line of content.split('\n')) {
+    const match = line.match(/^\s*\**(\d{1,3})\**[.)]\s+\S/);
+    // Require a price on the line too -- a numbered list of unrelated advice
+    // ("1. Check the blade material.") can otherwise match the same shape as
+    // a numbered product list, and would wrongly summon cards.
+    const isNext = match && Number(match[1]) === expected && /\$\d|\d\s?(usd|dollars)/i.test(line);
+    if (!isNext) {
+      // Before the list starts, intro prose ("Here's what you have:") is
+      // expected and shouldn't end the scan. Once inside the list, anything
+      // that breaks the sequence (trailing prose, an unrelated list) does.
+      if (started) break;
+      continue;
     }
+    started = true;
+    const product = catalog[expected - 1];
+    if (!product) break;
+    if (!ids.includes(product.id)) ids.push(product.id);
+    expected++;
   }
 
   return { content: content || '…', productIds: ids, actions };
