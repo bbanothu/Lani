@@ -325,16 +325,25 @@ export default function ChatPage() {
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed) return;
 
+    // Typing/sending is never blocked (see the always-enabled input below),
+    // so more than one send() can be in flight at once -- suffix ids with a
+    // random component instead of just Date.now() so two messages fired in
+    // the same millisecond don't collide and get merged into one bubble.
+    const uid = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const userMsg: UiMessage = {
-      id: `u_${Date.now()}`,
+      id: `u_${uid()}`,
       role: 'user',
       content: trimmed,
     };
-    const assistantId = `a_${Date.now()}`;
+    const assistantId = `a_${uid()}`;
     const next = [...messages, userMsg];
-    setMessages([...next, { id: assistantId, role: 'assistant', content: '' }]);
+    setMessages((current) => [
+      ...current,
+      userMsg,
+      { id: assistantId, role: 'assistant', content: '' },
+    ]);
     setInput('');
     setSending(true);
     setError(null);
@@ -558,12 +567,10 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={listening ? 'Listening…' : 'Type a message...'}
                 className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink/35"
-                disabled={sending}
               />
               <button
                 type="button"
                 onClick={toggleListening}
-                disabled={sending}
                 aria-label={listening ? 'Stop voice input' : 'Start voice input'}
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                   listening ? 'bg-rose-600 hover:bg-rose-700' : 'bg-brand hover:bg-brand-dark'
@@ -592,7 +599,7 @@ export default function ChatPage() {
               </button>
               <button
                 type="submit"
-                disabled={sending || !input.trim()}
+                disabled={!input.trim()}
                 aria-label="Send"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
               >
