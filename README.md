@@ -87,13 +87,13 @@ own lockfile and Expo/React Native toolchain.
 
 ## Prerequisites
 
-| Tool            | Version           | Used by                     |
-| --------------- | ----------------- | --------------------------- |
-| Node.js         | 20+ (26 works)    | all apps                    |
-| npm             | 9+                | root workspaces, mobile app |
-| Supabase CLI    | latest            | migrations, edge functions  |
-| Deno            | latest            | edge functions (via CLI)    |
-| Expo / EAS CLI  | latest            | mobile app builds           |
+| Tool               | Version        | Used by                     |
+| ------------------ | -------------- | --------------------------- |
+| Node.js            | 20+ (26 works) | all apps                    |
+| npm                | 9+             | root workspaces, mobile app |
+| Supabase CLI       | latest         | migrations, edge functions  |
+| Deno               | latest         | edge functions (via CLI)    |
+| Expo / EAS CLI     | latest         | mobile app builds           |
 | A Chromium browser | —              | loading the extension       |
 
 You also need API keys for whichever LLM provider you want to use (see
@@ -253,10 +253,10 @@ providers, and you bring your own key. Keys are stored client-side only
 (`chrome.storage.local` / `localStorage` / Async Storage) and, for web chat, sent
 per-request to the `/api/chat` proxy — never persisted server-side.
 
-| Provider     | Key needed | Notes                                                        |
-| ------------ | ---------- | ----------------------------------------------------------- |
-| `claude`     | yes        | Anthropic Messages API. Default model `claude-sonnet-5`.     |
-| `openrouter` | yes        | OpenAI-compatible; use any model slug, e.g. `anthropic/claude-sonnet-5`. |
+| Provider     | Key needed | Notes                                                                                      |
+| ------------ | ---------- | ------------------------------------------------------------------------------------------ |
+| `claude`     | yes        | Anthropic Messages API. Default model `claude-sonnet-5`.                                   |
+| `openrouter` | yes        | OpenAI-compatible; use any model slug, e.g. `anthropic/claude-sonnet-5`.                   |
 | `ollama`     | no         | Local, OpenAI-compatible endpoint (default `http://localhost:11434/v1`). Default provider. |
 
 The extension uses the LLM for a single yes/no classification per unknown page
@@ -269,18 +269,18 @@ The extension uses the LLM for a single yes/no classification per unknown page
 All tables have row-level security; users only see their own rows unless a list
 is explicitly shared or public.
 
-| Table                 | Purpose                                                              |
-| --------------------- | ------------------------------------------------------------------- |
-| `products`            | Captured/added products. Unique per `(user_id, url)`.                |
-| `lists`               | User lists. One auto-created `Favorites` list per user (undeletable).|
-| `list_products`       | Membership join between lists and products.                          |
-| `cart_items`          | Products in the user's cart.                                         |
-| `chat_sessions`       | Chat threads with the assistant, ordered by last activity.           |
-| `chat_messages`       | Messages within a session, with referenced product IDs.              |
-| `tracked_products`    | Shared, de-duplicated-by-URL price-tracking targets.                 |
-| `price_history`       | Time series of observed prices per tracked product.                  |
-| `integrations`        | OAuth tokens for connected marketplaces (eBay, Etsy, Reverb).        |
-| `blacklisted_domains` | Domains the user (or the extension's AI) marked as non-product.      |
+| Table                 | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `products`            | Captured/added products. Unique per `(user_id, url)`.                 |
+| `lists`               | User lists. One auto-created `Favorites` list per user (undeletable). |
+| `list_products`       | Membership join between lists and products.                           |
+| `cart_items`          | Products in the user's cart.                                          |
+| `chat_sessions`       | Chat threads with the assistant, ordered by last activity.            |
+| `chat_messages`       | Messages within a session, with referenced product IDs.               |
+| `tracked_products`    | Shared, de-duplicated-by-URL price-tracking targets.                  |
+| `price_history`       | Time series of observed prices per tracked product.                   |
+| `integrations`        | OAuth tokens for connected marketplaces (eBay, Etsy, Reverb).         |
+| `blacklisted_domains` | Domains the user (or the extension's AI) marked as non-product.       |
 
 Storage: a public `avatars` bucket, one folder per user, owner-only writes.
 
@@ -293,10 +293,10 @@ New-user and safety triggers (Favorites creation, Favorites protection) live in
 
 Located in `apps/website/supabase/functions/`, written for Deno.
 
-| Function          | Trigger              | What it does                                                                 |
-| ----------------- | -------------------- | -------------------------------------------------------------------------- |
+| Function          | Trigger              | What it does                                                                                                                                                                                                                        |
+| ----------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rescrape-prices` | scheduled (daily)    | Fetches each `tracked_products.url`, extracts a price from static HTML, and appends to `price_history` when it changes. Plain `fetch` + regex — no headless browser, so JS-rendered or bot-walled prices (e.g. Amazon) are skipped. |
-| `delete-account`  | authenticated `POST` | Deletes the caller's auth user and cascades away all of their data.          |
+| `delete-account`  | authenticated `POST` | Deletes the caller's auth user and cascades away all of their data.                                                                                                                                                                 |
 
 ---
 

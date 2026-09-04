@@ -94,7 +94,8 @@ export default function NewHeader({ onShopWithLani }: { onShopWithLani?: () => v
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F97316] opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF6900]"></span>
                   </span>
-                </div>asd
+                </div>
+                asd
                 <span className="text-xl font-semibold text-[#0C0A09] tabular-nums">
                   {displayCount.toLocaleString('en-US')}
                 </span>
