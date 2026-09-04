@@ -86,6 +86,44 @@ async function buildSystemMessage(products: Product[], lists: ProductList[]): Pr
   };
 }
 
+const STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'this',
+  'that',
+  'your',
+  'you',
+  'are',
+  'was',
+  'from',
+  'into',
+  'inch',
+  'inches',
+  'replica',
+  'model',
+]);
+
+// Words that identify a product even when the model paraphrases or shortens
+// its title -- e.g. it says "the Yamato Sword" instead of repeating the full
+// catalog title verbatim. A word only counts if it's unique to that one
+// product's title among the current catalog: shared category words ("sword",
+// appearing in every title of a swords list) are automatically excluded
+// without needing a hand-written domain stopword list, since they map to
+// more than one product.
+function distinctiveWordSets(catalog: Product[]): Set<string>[] {
+  const titleWords = catalog.map(
+    (p) =>
+      new Set((p.title.toLowerCase().match(/[a-z]{3,}/g) || []).filter((w) => !STOPWORDS.has(w))),
+  );
+  const wordOwners = new Map<string, number>(); // word -> count of products containing it
+  for (const words of titleWords) {
+    for (const w of words) wordOwners.set(w, (wordOwners.get(w) ?? 0) + 1);
+  }
+  return titleWords.map((words) => new Set([...words].filter((w) => wordOwners.get(w) === 1)));
+}
+
 function parseAssistantReply(
   raw: string,
   catalog: Product[],
@@ -129,13 +167,23 @@ function parseAssistantReply(
     })
     .trim();
 
+  // Prose mention: the model almost never repeats a full catalog title
+  // verbatim once it's paraphrasing in a sentence ("the Yamato Sword is a
+  // great pick" vs. the full listing title) -- match on the product's own
+  // distinctive words instead of requiring the entire title as a substring.
   const lower = content.toLowerCase();
-  for (const product of catalog) {
-    const title = product.title.trim();
-    if (title.length >= 8 && lower.includes(title.toLowerCase()) && !ids.includes(product.id)) {
-      ids.push(product.id);
+  const distinctiveSets = distinctiveWordSets(catalog);
+  catalog.forEach((product, i) => {
+    if (ids.includes(product.id)) return;
+    const words = distinctiveSets[i];
+    if (words.size === 0) return; // nothing unique to key off -- skip rather than guess
+    for (const w of words) {
+      if (new RegExp(`\\b${w}\\b`, 'i').test(lower)) {
+        ids.push(product.id);
+        break;
+      }
     }
-  }
+  });
 
   // Fallback: the model is told to number items using the catalog's own item
   // numbers when listing them (e.g. "1. **Title** ..."). If it did that but
