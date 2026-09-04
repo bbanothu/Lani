@@ -131,6 +131,15 @@ export async function POST(req: Request) {
   });
 
   return new Response(stream, {
-    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      // Ask any intermediate proxy (Cloudflare, nginx, etc.) not to buffer the
+      // response -- a buffering proxy holds the whole reply until it's
+      // complete or a buffer fills, which looks identical to a hung chat from
+      // the client's side even though the server is streaming fine.
+      'X-Accel-Buffering': 'no',
+    },
   });
 }

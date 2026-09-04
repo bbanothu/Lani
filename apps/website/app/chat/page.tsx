@@ -417,13 +417,6 @@ export default function ChatPage() {
       }
 
       const parsed = parseAssistantReply(full.trim(), catalog, lists);
-      // TEMP debug -- open the browser console and retry to see why cards
-      // aren't showing up; remove once resolved.
-      console.log('[lani chat debug]', {
-        catalogSize: catalog.length,
-        rawTail: full.trim().slice(-200),
-        productIds: parsed.productIds,
-      });
       await runChatActions(parsed.actions);
       setMessages((current) =>
         current.map((m) =>

@@ -18,8 +18,17 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const err =
-      mode === 'signup' ? await signUp(email, password, name) : await signIn(email, password);
+    let err: string | null;
+    try {
+      err = mode === 'signup' ? await signUp(email, password, name) : await signIn(email, password);
+    } catch (caught) {
+      // signIn/signUp already catch and return their own errors as a string --
+      // this is a last-resort net so a genuinely unexpected throw still
+      // re-enables the form instead of leaving it stuck on "Please wait...".
+      setBusy(false);
+      setError(caught instanceof Error ? caught.message : 'Something went wrong. Try again.');
+      return;
+    }
     setBusy(false);
     if (err) {
       setError(err);

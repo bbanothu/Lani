@@ -30,22 +30,36 @@ export async function getUser(): Promise<AuthUser | null> {
   return fromSession(data.session);
 }
 
+// Supabase's own AuthError is returned as { error } and never throws, but a
+// request that fails before it even reaches the network (e.g. the browser's
+// fetch/Headers validation) throws instead -- without this catch that becomes
+// an unhandled rejection: the caller's `await` never resolves, so a caller
+// that only resets its "submitting" state after the await (as the login form
+// does) hangs forever with no visible error.
 export async function signUp(
   email: string,
   password: string,
   name: string,
 ): Promise<string | null> {
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { name: name || email.split('@')[0] } },
-  });
-  return error?.message ?? null;
+  try {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name: name || email.split('@')[0] } },
+    });
+    return error?.message ?? null;
+  } catch (err) {
+    return err instanceof Error ? err.message : 'Sign up failed';
+  }
 }
 
 export async function signIn(email: string, password: string): Promise<string | null> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  return error?.message ?? null;
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return error?.message ?? null;
+  } catch (err) {
+    return err instanceof Error ? err.message : 'Sign in failed';
+  }
 }
 
 export async function signOut(): Promise<void> {
