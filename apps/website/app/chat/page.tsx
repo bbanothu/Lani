@@ -70,6 +70,7 @@ async function buildSystemMessage(products: Product[], lists: ProductList[]): Pr
       'When you recommend or discuss specific products from the list, end your message with exactly one line:',
       '[[products:1,2]]',
       'Use the item numbers from the list above (never the product name or a made-up id). Omit that line if no products apply.',
+      'This line is required, even if you already numbered or bulleted those same items earlier in your reply -- it is what shows the product cards to the user, so never skip it when the reply mentions specific items.',
       '',
       'You can also take actions the user asks for by including one tag per action, anywhere in your reply (they are removed before the user sees the message, so also confirm the action in plain text):',
       '[[action:add_cart:N]] -- add item N to the cart',
@@ -136,6 +137,26 @@ function parseAssistantReply(
     }
   }
 
+  // Last-resort fallback: the model is told to number items using the
+  // catalog's own item numbers when listing them (e.g. "1. **Title** ...").
+  // If it did that but forgot the required [[products:...]] line, and the
+  // title fallback above didn't catch a match (paraphrased/shortened titles
+  // in the reply), recover the cards from that numbering instead of showing
+  // none. Only kicks in when nothing else matched, and only for a sequence
+  // that starts at 1 and stays in order -- so it can't misfire on an
+  // unrelated numbered list (steps, tips, etc.) elsewhere in the reply.
+  if (ids.length === 0) {
+    let expected = 1;
+    for (const line of content.split('\n')) {
+      const match = line.match(/^\s*\**(\d{1,3})\**[.)]\s+\S/);
+      if (!match || Number(match[1]) !== expected) break;
+      const product = catalog[expected - 1];
+      if (!product) break;
+      ids.push(product.id);
+      expected++;
+    }
+  }
+
   return { content: content || '…', productIds: ids, actions };
 }
 
@@ -154,6 +175,10 @@ async function readSSELines(
     buffer = lines.pop() ?? '';
     for (const line of lines) onLine(line);
   }
+  // The final chunk before the stream closes often isn't newline-terminated --
+  // flush it instead of silently dropping the last line (e.g. a trailing
+  // [[products:...]] tag on the very last delta).
+  if (buffer) onLine(buffer);
 }
 
 async function runChatActions(actions: ChatAction[]): Promise<void> {
@@ -302,6 +327,16 @@ export default function ChatPage() {
     setSending(true);
     setError(null);
 
+    // Watchdog: if the stream stalls (server hang, dropped connection, a
+    // provider that never closes the response) the input must not stay
+    // disabled forever -- abort and surface an error instead.
+    const abortController = new AbortController();
+    let lastActivity = Date.now();
+    const STALL_MS = 30000;
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastActivity > STALL_MS) abortController.abort();
+    }, 2000);
+
     try {
       let sid = sessionId;
       if (!sid) {
@@ -320,6 +355,7 @@ export default function ChatPage() {
       const settings = getLLMSettings();
       let full = '';
       const pushDelta = (delta: string) => {
+        lastActivity = Date.now();
         full += delta;
         const display = stripActionTags(full);
         if (display) {
@@ -343,6 +379,7 @@ export default function ChatPage() {
             temperature: 0.5,
             stream: true,
           }),
+          signal: abortController.signal,
         });
         if (!res.ok || !res.body) {
           const text = await res.text().catch(() => '');
@@ -363,6 +400,7 @@ export default function ChatPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: history, settings }),
+          signal: abortController.signal,
         });
         if (!res.ok || !res.body) {
           const data = await res.json().catch(() => ({}));
@@ -379,6 +417,13 @@ export default function ChatPage() {
       }
 
       const parsed = parseAssistantReply(full.trim(), catalog, lists);
+      // TEMP debug -- open the browser console and retry to see why cards
+      // aren't showing up; remove once resolved.
+      console.log('[lani chat debug]', {
+        catalogSize: catalog.length,
+        rawTail: full.trim().slice(-200),
+        productIds: parsed.productIds,
+      });
       await runChatActions(parsed.actions);
       setMessages((current) =>
         current.map((m) =>
@@ -389,9 +434,17 @@ export default function ChatPage() {
       );
       await addChatMessage(sid, 'assistant', parsed.content, parsed.productIds);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Chat failed');
+      const timedOut = err instanceof Error && err.name === 'AbortError';
+      setError(
+        timedOut
+          ? 'The assistant took too long to respond. Please try again.'
+          : err instanceof Error
+            ? err.message
+            : 'Chat failed',
+      );
       setMessages((current) => current.filter((m) => m.id !== assistantId));
     } finally {
+      clearInterval(watchdog);
       setSending(false);
     }
   }

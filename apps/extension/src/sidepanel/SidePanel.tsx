@@ -1,17 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import {
   LLMSettings,
-  LogEntry,
   CapturedProduct,
   getSettings,
   saveSettings,
   getOutbox,
   clearOutbox,
-  getLogs,
-  clearLogs,
-  getNonProductDomains,
-  unmarkDomainAsNonProduct,
-  clearNonProductDomains,
   isPaused,
   setPaused,
 } from '../lib/storage';
@@ -28,12 +22,6 @@ const DEFAULT_MODELS: Record<LLMSettings['provider'], string> = {
   ollama: 'llama3.1',
 };
 
-const LEVEL_STYLES: Record<LogEntry['level'], string> = {
-  info: 'text-ink/50',
-  success: 'text-green-600',
-  error: 'text-red-600',
-};
-
 function timeAgo(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return `${Math.floor(seconds)}s ago`;
@@ -41,8 +29,8 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
-type View = 'main' | 'settings';
-type SettingsTab = 'logs' | 'blacklist' | 'ai';
+type Tab = 'captured' | 'ai';
+
 interface AuthUser {
   id: string;
   email: string;
@@ -154,12 +142,9 @@ function fetchOllamaModels(
 
 export default function SidePanel() {
   const [authUser, setAuthUser] = useState<AuthUser | null | undefined>(undefined);
-  const [view, setView] = useState<View>('main');
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('logs');
+  const [tab, setTab] = useState<Tab>('captured');
   const [settings, setSettings] = useState<LLMSettings | null>(null);
-  const [outbox, setOutbox] = useState<CapturedProduct[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [blacklist, setBlacklist] = useState<string[]>([]);
+  const [captured, setCaptured] = useState<CapturedProduct[]>([]);
   const [saveStatus, setSaveStatus] = useState('');
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [ollamaModelsError, setOllamaModelsError] = useState('');
@@ -185,28 +170,25 @@ export default function SidePanel() {
     setLoadingModels(false);
   };
 
-  const refresh = () => {
-    getOutbox().then(setOutbox);
-    getLogs().then(setLogs);
-    getNonProductDomains().then(setBlacklist);
-  };
-
   useEffect(() => {
     getSettings().then((s) => {
-      setSettings(s);
-      if (s.provider === 'ollama') {
-        refreshOllamaModels(s.ollamaBaseUrl || 'http://localhost:11434/v1');
+      // Claude has no model field in the UI -- always run the pinned default,
+      // in case an earlier build left another provider's model in place.
+      const fixed = s.provider === 'claude' ? { ...s, model: DEFAULT_MODELS.claude } : s;
+      setSettings(fixed);
+      if (fixed.provider === 'ollama') {
+        refreshOllamaModels(fixed.ollamaBaseUrl || 'http://localhost:11434/v1');
       }
     });
     isPaused().then(setPausedState);
-    refresh();
+    getOutbox().then(setCaptured);
     const refreshAuth = () =>
       sendMessage<{ ok: boolean; user: AuthUser | null }>({ type: 'authGetUser' }).then((res) =>
         setAuthUser(res.ok ? res.user : null),
       );
     refreshAuth();
     const interval = setInterval(() => {
-      refresh();
+      getOutbox().then(setCaptured);
       refreshAuth();
     }, 1500);
     return () => clearInterval(interval);
@@ -231,29 +213,18 @@ export default function SidePanel() {
 
   const handleSaveSettings = async () => {
     if (!settings) return;
-    await saveSettings(settings);
+    await saveSettings({
+      ...settings,
+      apiKey: settings.apiKey.trim(),
+      model: settings.model.trim(),
+    });
     setSaveStatus('Settings saved.');
     setTimeout(() => setSaveStatus(''), 2000);
   };
 
-  const handleUnblock = async (domain: string) => {
-    await unmarkDomainAsNonProduct(domain);
-    setBlacklist(await getNonProductDomains());
-  };
-
-  const handleClearBlacklist = async () => {
-    await clearNonProductDomains();
-    setBlacklist(await getNonProductDomains());
-  };
-
-  const handleClearOutbox = async () => {
+  const handleClearCaptured = async () => {
     await clearOutbox();
-    setOutbox(await getOutbox());
-  };
-
-  const handleClearLogs = async () => {
-    await clearLogs();
-    setLogs(await getLogs());
+    setCaptured([]);
   };
 
   if (authUser === undefined || !settings) {
@@ -278,9 +249,7 @@ export default function SidePanel() {
         </div>
         <span className="ml-auto flex items-center gap-3 text-sm text-ink/50">
           <span
-            className={`w-4 h-4 rounded-full ${
-              paused ? 'bg-ink/30' : 'bg-green-500 animate-pulse'
-            }`}
+            className={`w-4 h-4 rounded-full ${paused ? 'bg-ink/30' : 'bg-green-500 animate-pulse'}`}
           />
           {paused ? 'paused' : 'watching'}
           <button
@@ -290,79 +259,50 @@ export default function SidePanel() {
             Sign out
           </button>
         </span>
-        <button
-          onClick={() => setView(view === 'settings' ? 'main' : 'settings')}
-          aria-label="Settings"
-          className={`p-3 rounded-lg transition-colors ${
-            view === 'settings'
-              ? 'bg-brand/10 text-brand'
-              : 'text-ink/40 hover:text-ink hover:bg-ink/5'
-          }`}
-        >
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-        </button>
       </header>
 
-      {view === 'settings' && (
-        <nav className="px-5 pt-4">
-          <div className="flex rounded-full border border-ink/10 bg-white p-1 text-sm shadow-sm">
-            {(
-              [
-                ['logs', 'Logs'],
-                ['blacklist', `Blacklist (${blacklist.length})`],
-                ['ai', 'AI'],
-              ] as [SettingsTab, string][]
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setSettingsTab(key)}
-                className={`flex-1 py-1.5 rounded-full font-medium transition-colors text-xs ${
-                  settingsTab === key
-                    ? 'bg-brand text-white shadow-sm'
-                    : 'text-ink/50 hover:text-ink'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
+      <nav className="px-5 pt-4">
+        <div className="flex rounded-full border border-ink/10 bg-white p-1 text-sm shadow-sm">
+          {(
+            [
+              ['captured', `Captured (${captured.length})`],
+              ['ai', 'AI'],
+            ] as [Tab, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 py-1.5 rounded-full font-medium transition-colors text-xs ${
+                tab === key ? 'bg-brand text-white shadow-sm' : 'text-ink/50 hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </nav>
 
       <main className="flex-1 px-5 py-5 space-y-3 overflow-y-auto">
-        {view === 'main' && (
+        {tab === 'captured' && (
           <>
             <div className="flex items-center justify-between px-1">
-              <p className="text-xs font-semibold text-ink/40">Captured ({outbox.length})</p>
-              {outbox.length > 0 && (
+              <p className="text-xs font-semibold text-ink/40">Last {captured.length} captured</p>
+              {captured.length > 0 && (
                 <button
-                  onClick={handleClearOutbox}
+                  onClick={handleClearCaptured}
                   className="text-xs text-red-500 hover:text-red-600 font-medium"
                 >
                   Clear all
                 </button>
               )}
             </div>
-            {outbox.length === 0 ? (
+            {captured.length === 0 ? (
               <div className="bg-white rounded-2xl border border-ink/10 shadow-sm p-5 text-center text-sm text-ink/50">
                 Nothing captured yet -- browse to a shopping site and this will fill up.
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-ink/10 shadow-sm divide-y divide-ink/5">
-                {outbox.map((p, i) => (
+                {captured.map((p, i) => (
                   <a
                     key={i}
                     href={p.url}
@@ -379,6 +319,7 @@ export default function SidePanel() {
                       <p className="text-xs font-semibold text-ink truncate">{p.title}</p>
                       <p className="text-[11px] text-ink/40 truncate">
                         {p.domain} · {timeAgo(p.capturedAt)}
+                        {p.synced ? '' : ' · syncing…'}
                       </p>
                       {p.tags?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -406,78 +347,7 @@ export default function SidePanel() {
           </>
         )}
 
-        {view === 'settings' && settingsTab === 'logs' && (
-          <>
-            {logs.length > 0 && (
-              <div className="flex justify-end px-1">
-                <button
-                  onClick={handleClearLogs}
-                  className="text-xs text-red-500 hover:text-red-600 font-medium"
-                >
-                  Clear all
-                </button>
-              </div>
-            )}
-            {logs.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-ink/10 shadow-sm p-5 text-center text-sm text-ink/50">
-                No activity yet -- browse to a shopping site and this will fill up.
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-ink/10 shadow-sm divide-y divide-ink/5">
-                {logs.map((log, i) => (
-                  <div key={i} className="px-4 py-2.5 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-ink truncate">{log.domain}</span>
-                      <span className="text-ink/30 shrink-0">{timeAgo(log.time)}</span>
-                    </div>
-                    <p className={LEVEL_STYLES[log.level]}>{log.message}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {view === 'settings' && settingsTab === 'blacklist' && (
-          <div className="bg-white rounded-2xl border border-ink/10 shadow-sm p-5 space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs text-ink/50">
-                Domains the AI has said aren't product sites -- future pages on these are skipped
-                automatically without asking the AI again.
-              </p>
-              {blacklist.length > 0 && (
-                <button
-                  onClick={handleClearBlacklist}
-                  className="text-xs text-red-500 hover:text-red-600 font-medium shrink-0"
-                >
-                  Clear all
-                </button>
-              )}
-            </div>
-            {blacklist.length === 0 ? (
-              <p className="text-sm text-ink/40 text-center py-4">Nothing blacklisted yet.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {blacklist.map((domain) => (
-                  <div
-                    key={domain}
-                    className="flex items-center justify-between text-sm bg-ink/[0.03] rounded-lg px-3 py-2"
-                  >
-                    <span className="text-ink truncate">{domain}</span>
-                    <button
-                      onClick={() => handleUnblock(domain)}
-                      className="text-xs text-brand hover:text-brand-dark font-medium shrink-0 ml-2"
-                    >
-                      Unblock
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {view === 'settings' && settingsTab === 'ai' && (
+        {tab === 'ai' && (
           <>
             <div className="bg-white rounded-2xl border border-ink/10 shadow-sm p-5 flex items-center justify-between gap-3">
               <div>
@@ -570,47 +440,47 @@ export default function SidePanel() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-semibold text-ink/70 mb-1.5">Model</label>
-                {settings.provider === 'ollama' && ollamaModels.length > 0 ? (
-                  <select
-                    value={settings.model}
-                    onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                    className="w-full px-3 py-2 border border-ink/15 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-shadow bg-white"
-                  >
-                    {!ollamaModels.includes(settings.model) && (
-                      <option value={settings.model}>{settings.model}</option>
-                    )}
-                    {ollamaModels.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={settings.model}
-                    onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                    placeholder={
-                      settings.provider === 'openrouter'
-                        ? 'e.g. anthropic/claude-sonnet-5'
-                        : settings.provider === 'ollama'
-                          ? 'e.g. llama3.1'
-                          : 'e.g. claude-sonnet-5'
-                    }
-                    className="w-full px-3 py-2 border border-ink/15 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-shadow"
-                  />
-                )}
-                {settings.provider === 'ollama' &&
-                  ollamaModels.length === 0 &&
-                  !loadingModels &&
-                  !ollamaModelsError && (
-                    <p className="text-xs text-ink/40 mt-1">
-                      Couldn't list installed models -- typing one in manually.
-                    </p>
+              {settings.provider !== 'claude' && (
+                <div>
+                  <label className="block text-xs font-semibold text-ink/70 mb-1.5">Model</label>
+                  {settings.provider === 'ollama' && ollamaModels.length > 0 ? (
+                    <select
+                      value={settings.model}
+                      onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                      className="w-full px-3 py-2 border border-ink/15 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-shadow bg-white"
+                    >
+                      {!ollamaModels.includes(settings.model) && (
+                        <option value={settings.model}>{settings.model}</option>
+                      )}
+                      {ollamaModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={settings.model}
+                      onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                      placeholder={
+                        settings.provider === 'openrouter'
+                          ? 'e.g. anthropic/claude-sonnet-5'
+                          : 'e.g. llama3.1'
+                      }
+                      className="w-full px-3 py-2 border border-ink/15 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-shadow"
+                    />
                   )}
-              </div>
+                  {settings.provider === 'ollama' &&
+                    ollamaModels.length === 0 &&
+                    !loadingModels &&
+                    !ollamaModelsError && (
+                      <p className="text-xs text-ink/40 mt-1">
+                        Couldn't list installed models -- typing one in manually.
+                      </p>
+                    )}
+                </div>
+              )}
 
               <button
                 onClick={handleSaveSettings}

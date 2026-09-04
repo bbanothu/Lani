@@ -7,11 +7,13 @@ export interface LLMSettings {
 
 const SETTINGS_KEY = 'lani_llm_settings';
 const OUTBOX_KEY = 'lani_captured_products';
-const NO_PRODUCT_DOMAINS_KEY = 'lani_no_product_domains';
 const SEEN_URLS_KEY = 'lani_seen_product_urls';
-const LOGS_KEY = 'lani_logs';
-const MAX_LOGS = 200;
 const PAUSED_KEY = 'lani_paused';
+
+// The captured list is kept locally as a rolling history -- it is NOT a
+// drain-once queue. Items stay after they sync (marked `synced`) so the side
+// panel can show recent activity; only the newest MAX_CAPTURED are retained.
+const MAX_CAPTURED = 20;
 
 const DEFAULT_SETTINGS: LLMSettings = {
   provider: 'ollama',
@@ -43,6 +45,9 @@ export interface CapturedProduct {
   domain: string;
   tags: string[];
   capturedAt: string;
+  // Set once the background worker has pushed this item to Supabase, so it
+  // isn't re-processed on every sync tick while it stays in the local list.
+  synced?: boolean;
 }
 
 export function getOutbox(): Promise<CapturedProduct[]> {
@@ -60,17 +65,30 @@ export function clearOutbox(): Promise<void> {
 export function addToOutbox(product: CapturedProduct): Promise<void> {
   return new Promise((resolve) => {
     chrome.storage.local.get(OUTBOX_KEY, (result) => {
-      const outbox = result[OUTBOX_KEY] || [];
-      chrome.storage.local.set({ [OUTBOX_KEY]: [product, ...outbox] }, () => resolve());
+      const outbox: CapturedProduct[] = result[OUTBOX_KEY] || [];
+      const deduped = outbox.filter((p) => p.url !== product.url);
+      const next = [product, ...deduped].slice(0, MAX_CAPTURED);
+      chrome.storage.local.set({ [OUTBOX_KEY]: next }, () => resolve());
     });
   });
 }
 
-// Revisiting a product that's still sitting in the local queue (captured but
-// not yet synced): don't queue a second copy -- just move the existing entry
-// to the front and refresh its timestamp so it sorts to the top of the
-// dashboard once it syncs. No-op if the url isn't queued (already synced --
-// the background worker's bumpProduct handles that case against Supabase).
+// Mark queued items as synced in place (instead of removing them) so they
+// stay visible in the side panel but don't get re-sent next tick.
+export function markOutboxSynced(urls: string[]): Promise<void> {
+  const done = new Set(urls);
+  return new Promise((resolve) => {
+    chrome.storage.local.get(OUTBOX_KEY, (result) => {
+      const outbox: CapturedProduct[] = result[OUTBOX_KEY] || [];
+      const next = outbox.map((p) => (done.has(p.url) ? { ...p, synced: true } : p));
+      chrome.storage.local.set({ [OUTBOX_KEY]: next }, () => resolve());
+    });
+  });
+}
+
+// Revisiting a product that's already in the local list: move its entry to
+// the front and refresh its timestamp. No-op if the url isn't in the list.
+// (The synced Supabase row is reordered separately via bumpProduct.)
 export function touchOutboxUrl(url: string): Promise<void> {
   return new Promise((resolve) => {
     chrome.storage.local.get(OUTBOX_KEY, (result) => {
@@ -83,52 +101,6 @@ export function touchOutboxUrl(url: string): Promise<void> {
         () => resolve(),
       );
     });
-  });
-}
-
-// Domains the AI has already said "not a product page" for -- skips asking
-// again on every future page load on that domain. Only ever grows from a
-// "no" answer; a "yes" on one page doesn't imply every page on the domain
-// is a product, so it's never used to skip-and-capture.
-export function isDomainKnownNonProduct(domain: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(NO_PRODUCT_DOMAINS_KEY, (result) => {
-      resolve(Boolean((result[NO_PRODUCT_DOMAINS_KEY] || {})[domain]));
-    });
-  });
-}
-
-export function markDomainAsNonProduct(domain: string): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(NO_PRODUCT_DOMAINS_KEY, (result) => {
-      const domains = result[NO_PRODUCT_DOMAINS_KEY] || {};
-      domains[domain] = true;
-      chrome.storage.local.set({ [NO_PRODUCT_DOMAINS_KEY]: domains }, () => resolve());
-    });
-  });
-}
-
-export function getNonProductDomains(): Promise<string[]> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(NO_PRODUCT_DOMAINS_KEY, (result) => {
-      resolve(Object.keys(result[NO_PRODUCT_DOMAINS_KEY] || {}).sort());
-    });
-  });
-}
-
-export function unmarkDomainAsNonProduct(domain: string): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(NO_PRODUCT_DOMAINS_KEY, (result) => {
-      const domains = result[NO_PRODUCT_DOMAINS_KEY] || {};
-      delete domains[domain];
-      chrome.storage.local.set({ [NO_PRODUCT_DOMAINS_KEY]: domains }, () => resolve());
-    });
-  });
-}
-
-export function clearNonProductDomains(): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [NO_PRODUCT_DOMAINS_KEY]: {} }, () => resolve());
   });
 }
 
@@ -149,42 +121,6 @@ export function markUrlAsSeen(url: string): Promise<void> {
       urls[url] = true;
       chrome.storage.local.set({ [SEEN_URLS_KEY]: urls }, () => resolve());
     });
-  });
-}
-
-export type LogLevel = 'info' | 'success' | 'error';
-
-export interface LogEntry {
-  time: string;
-  domain: string;
-  level: LogLevel;
-  message: string;
-}
-
-// Activity feed for the side panel's Logs tab -- capped so it can't grow
-// unbounded across a long browsing session.
-export function addLog(domain: string, message: string, level: LogLevel = 'info'): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(LOGS_KEY, (result) => {
-      const logs: LogEntry[] = result[LOGS_KEY] || [];
-      const next = [{ time: new Date().toISOString(), domain, level, message }, ...logs].slice(
-        0,
-        MAX_LOGS,
-      );
-      chrome.storage.local.set({ [LOGS_KEY]: next }, () => resolve());
-    });
-  });
-}
-
-export function getLogs(): Promise<LogEntry[]> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(LOGS_KEY, (result) => resolve(result[LOGS_KEY] || []));
-  });
-}
-
-export function clearLogs(): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [LOGS_KEY]: [] }, () => resolve());
   });
 }
 

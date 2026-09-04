@@ -1,5 +1,5 @@
 import { chatCompletion, listOllamaModels } from '../lib/llm';
-import { LLMSettings, CapturedProduct, getOutbox, clearOutbox, addLog } from '../lib/storage';
+import { LLMSettings, CapturedProduct, getOutbox, markOutboxSynced } from '../lib/storage';
 import { supabase, getAuthUser } from '../lib/supabase';
 
 // Makes the toolbar icon open the side panel directly instead of a popup.
@@ -27,7 +27,9 @@ function productRow(product: CapturedProduct) {
 async function syncOutbox() {
   const user = await getAuthUser();
   if (!user) return;
-  const outbox = await getOutbox();
+  // The local list is kept as history and never drained; only items not yet
+  // pushed to Supabase are processed here.
+  const outbox = (await getOutbox()).filter((p) => !p.synced);
   if (outbox.length === 0) return;
 
   // A product page is never scraped into a second row. We split the queue
@@ -42,7 +44,7 @@ async function syncOutbox() {
     .select('url')
     .in('url', urls);
   if (lookupError) {
-    addLog('lani', `Sync failed: ${lookupError.message}`, 'error');
+    console.warn('[lani] sync lookup failed:', lookupError.message);
     return;
   }
   const known = new Set((existing ?? []).map((r) => r.url as string));
@@ -60,7 +62,7 @@ async function syncOutbox() {
       .from('products')
       .insert(fresh.map((product) => ({ ...productRow(product), user_id: user.id })));
     if (error) {
-      addLog('lani', `Sync failed: ${error.message}`, 'error');
+      console.warn('[lani] sync insert failed:', error.message);
       return;
     }
   }
@@ -69,16 +71,11 @@ async function syncOutbox() {
   // of re-adding it.
   const bumps = urls.filter((u) => known.has(u));
   if (bumps.length > 0) {
-    await supabase
-      .from('products')
-      .update({ added_at: new Date().toISOString() })
-      .in('url', bumps);
+    await supabase.from('products').update({ added_at: new Date().toISOString() }).in('url', bumps);
   }
 
-  await clearOutbox();
-  if (fresh.length > 0) {
-    addLog('lani', `Synced ${fresh.length} product(s) to your Lani account`, 'success');
-  }
+  // Keep the items in the local list (history), just flag them as synced.
+  await markOutboxSynced(urls);
 }
 
 // Revisiting a product page we've already captured: never re-scrape it, just
@@ -92,7 +89,7 @@ async function bumpProduct(url: string) {
     .from('products')
     .update({ added_at: new Date().toISOString() })
     .eq('url', url);
-  if (error) addLog('lani', `Reorder failed: ${error.message}`, 'error');
+  if (error) console.warn('[lani] reorder failed:', error.message);
 }
 
 // setInterval only keeps firing while the worker happens to be alive (fast

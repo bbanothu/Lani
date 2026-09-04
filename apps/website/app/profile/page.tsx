@@ -6,7 +6,14 @@ import { useRequireUser, signOut, updateName, deleteAccount } from '@/lib/auth';
 import { uploadAvatar } from '@/lib/avatar';
 import { Product, getProducts, subscribeToProducts } from '@/lib/products';
 import { getLists, subscribeToLists } from '@/lib/lists';
-import { getLLMSettings, saveLLMSettings, type LLMProvider, type LLMSettings } from '@/lib/llm';
+import {
+  DEFAULT_MODELS,
+  getLLMSettings,
+  isDefaultModel,
+  saveLLMSettings,
+  type LLMProvider,
+  type LLMSettings,
+} from '@/lib/llm';
 import BottomNav from '@/components/dashboard/BottomNav';
 import IntegrationsTab from '@/components/IntegrationsTab';
 
@@ -66,6 +73,8 @@ export default function ProfilePage() {
   const [favoritedCount, setFavoritedCount] = useState(0);
   const [llm, setLlm] = useState<LLMSettings | null>(null);
   const [llmSaved, setLlmSaved] = useState(false);
+  const [llmTest, setLlmTest] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [llmTestMsg, setLlmTestMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [tab, setTab] = useState<'general' | 'integrations'>('general');
@@ -90,7 +99,15 @@ export default function ProfilePage() {
   }, [ready, user]);
 
   useEffect(() => {
-    setLlm(getLLMSettings());
+    const stored = getLLMSettings();
+    // Repair the old state where switching provider left another provider's
+    // default model in place (e.g. provider "claude" but model "llama3.1").
+    if (isDefaultModel(stored.model) && stored.model !== DEFAULT_MODELS[stored.provider]) {
+      stored.model = DEFAULT_MODELS[stored.provider];
+    }
+    // Claude has no model field in the UI — always run the pinned default.
+    if (stored.provider === 'claude') stored.model = DEFAULT_MODELS.claude;
+    setLlm(stored);
   }, []);
 
   useEffect(() => {
@@ -140,6 +157,33 @@ export default function ProfilePage() {
     saveLLMSettings(llm);
     setLlmSaved(true);
     setTimeout(() => setLlmSaved(false), 1500);
+  }
+
+  async function handleTestLlm() {
+    if (!llm) return;
+    setLlmTest('testing');
+    setLlmTestMsg(null);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'ping' }],
+          settings: { ...llm, apiKey: llm.apiKey.trim() },
+        }),
+      });
+      if (res.ok) {
+        setLlmTest('ok');
+        void res.body?.cancel();
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setLlmTest('error');
+        setLlmTestMsg(data.error || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setLlmTest('error');
+      setLlmTestMsg(err instanceof Error ? err.message : 'Request failed');
+    }
   }
 
   async function handleDeleteAccount() {
@@ -331,7 +375,17 @@ export default function ProfilePage() {
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => setLlm({ ...llm, provider: p.id })}
+                        onClick={() => {
+                          setLlmTest('idle');
+                          setLlm({
+                            ...llm,
+                            provider: p.id,
+                            model:
+                              p.id === 'claude' || !llm.model.trim() || isDefaultModel(llm.model)
+                                ? DEFAULT_MODELS[p.id]
+                                : llm.model,
+                          });
+                        }}
                         className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
                           active
                             ? 'border-brand bg-brand text-white'
@@ -344,15 +398,19 @@ export default function ProfilePage() {
                   })}
                 </div>
 
-                <label className="mt-4 block text-xs font-semibold text-ink/45">Model</label>
-                <input
-                  type="text"
-                  value={llm.model}
-                  onChange={(e) => setLlm({ ...llm, model: e.target.value })}
-                  placeholder="e.g. llama3.1"
-                  autoCapitalize="none"
-                  className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
-                />
+                {llm.provider !== 'claude' ? (
+                  <>
+                    <label className="mt-4 block text-xs font-semibold text-ink/45">Model</label>
+                    <input
+                      type="text"
+                      value={llm.model}
+                      onChange={(e) => setLlm({ ...llm, model: e.target.value })}
+                      placeholder={`e.g. ${DEFAULT_MODELS[llm.provider]}`}
+                      autoCapitalize="none"
+                      className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                  </>
+                ) : null}
 
                 {llm.provider === 'ollama' ? (
                   <>
@@ -374,8 +432,11 @@ export default function ProfilePage() {
                     <input
                       type="password"
                       value={llm.apiKey}
-                      onChange={(e) => setLlm({ ...llm, apiKey: e.target.value })}
-                      placeholder="sk-..."
+                      onChange={(e) => {
+                        setLlmTest('idle');
+                        setLlm({ ...llm, apiKey: e.target.value });
+                      }}
+                      placeholder={llm.provider === 'claude' ? 'sk-ant-...' : 'sk-...'}
                       autoCapitalize="none"
                       className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
                     />
@@ -389,6 +450,27 @@ export default function ProfilePage() {
                 >
                   {llmSaved ? 'Saved ✓' : 'Save'}
                 </button>
+
+                {llm.provider !== 'ollama' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleTestLlm}
+                      disabled={llmTest === 'testing' || !llm.apiKey.trim()}
+                      className="mt-2 w-full rounded-lg border border-ink/15 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-ink/5 disabled:opacity-50"
+                    >
+                      {llmTest === 'testing' ? 'Testing…' : 'Test connection'}
+                    </button>
+                    {llmTest === 'ok' ? (
+                      <p className="mt-2 text-sm font-medium text-green-600">Connected ✓</p>
+                    ) : null}
+                    {llmTest === 'error' ? (
+                      <p className="mt-2 text-sm text-red-600">
+                        {llmTestMsg || 'Connection failed'}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
               </section>
             ) : null}
 

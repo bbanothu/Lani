@@ -74,6 +74,10 @@ async function claudeCompletion(prompt: string, settings: LLMSettings): Promise<
       model: settings.model || 'claude-sonnet-5',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 300,
+      // Newer Claude models default to "adaptive" thinking, which can consume
+      // the whole token budget before any answer -- this is a one-word
+      // yes/no classification, so keep it off.
+      thinking: { type: 'disabled' },
     }),
   });
 
